@@ -57,8 +57,9 @@ server = AgentServer()
 async def entrypoint(ctx: JobContext):
     room = ctx.room
 
-    # Parse personality from room name (format: room_{personality}_{random})
+    # Parse room name: room_{personality}_{patient_id}_{random} or room_{personality}_{random}
     personality_key = DEFAULT_PERSONALITY
+    patient_id = None
     room_name = room.name or ""
     logger.info(f"Room name: '{room_name}'")
 
@@ -66,6 +67,10 @@ async def entrypoint(ctx: JobContext):
         parts = room_name.split("_")
         if len(parts) >= 3 and parts[1] in PERSONALITIES:
             personality_key = parts[1]
+        if len(parts) >= 4 and parts[1] == "psicologo":
+            # room_psicologo_{patient_id}_{random}
+            patient_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
+            logger.info(f"Patient ID: '{patient_id}'")
 
     personality = PERSONALITIES[personality_key]
     logger.info(f"Iniciando agente: {personality['name']} (key={personality_key})")
@@ -76,7 +81,7 @@ async def entrypoint(ctx: JobContext):
 
     if personality.get("has_sessions"):
         # Dra. Ana with session management
-        manager = SessionManager()
+        manager = SessionManager(patient_id=patient_id or "default")
         tools = create_therapy_tools(manager)
 
         if manager.is_first_session():

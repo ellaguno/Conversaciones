@@ -177,9 +177,15 @@ function useSessionTimer() {
 }
 
 function useMetricsPoller() {
-  const [metrics, setMetrics] = useState<{ total_tokens: number; total_cost_usd: number } | null>(null);
+  const [metrics, setMetrics] = useState<{ total_tokens: number; total_cost_usd: number } | null>(
+    null
+  );
   useEffect(() => {
-    const poll = () => fetch('/api/metrics').then(r => r.json()).then(setMetrics).catch(() => {});
+    const poll = () =>
+      fetch('/api/metrics')
+        .then((r) => r.json())
+        .then(setMetrics)
+        .catch(() => {});
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
@@ -241,16 +247,17 @@ export function AgentSessionView_01({
     >
       {/* Session header */}
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-3">
-        <div className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+        <div className="border-border bg-background/80 text-muted-foreground rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-sm">
           {PERSONALITY_NAMES[personality ?? ''] ?? 'Conversacion'}
         </div>
         <div className="flex items-center gap-3">
           {metrics && metrics.total_tokens > 0 && (
-            <div className="rounded-full border border-border bg-background/80 px-3 py-1 text-[10px] font-mono text-muted-foreground backdrop-blur-sm">
-              {metrics.total_tokens.toLocaleString()} tok &middot; ${metrics.total_cost_usd.toFixed(4)}
+            <div className="border-border bg-background/80 text-muted-foreground rounded-full border px-3 py-1 font-mono text-[10px] backdrop-blur-sm">
+              {metrics.total_tokens.toLocaleString()} tok &middot; $
+              {metrics.total_cost_usd.toFixed(4)}
             </div>
           )}
-          <div className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-mono text-muted-foreground backdrop-blur-sm tabular-nums">
+          <div className="border-border bg-background/80 text-muted-foreground rounded-full border px-3 py-1 font-mono text-xs tabular-nums backdrop-blur-sm">
             {timer}
           </div>
         </div>

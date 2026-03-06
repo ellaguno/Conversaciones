@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { TokenSource } from 'livekit-client';
 import { useSession } from '@livekit/components-react';
 import { WarningIcon } from '@phosphor-icons/react/dist/ssr';
@@ -27,6 +27,7 @@ interface AppProps {
 function SessionInner({
   appConfig,
   personality,
+  patientId,
   autoConnect,
   selectedPersonality,
   onSelectPersonality,
@@ -35,10 +36,11 @@ function SessionInner({
 }: {
   appConfig: AppConfig;
   personality: string;
+  patientId: string;
   autoConnect: boolean;
   selectedPersonality: string;
   onSelectPersonality: (p: string) => void;
-  onStartCall: (p: string) => void;
+  onStartCall: (p: string, patientId?: string) => void;
   onDisconnected: () => void;
 }) {
   const tokenSource = useMemo(() => {
@@ -46,14 +48,14 @@ function SessionInner({
       const res = await fetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personality }),
+        body: JSON.stringify({ personality, patientId }),
       });
       if (!res.ok) {
         throw new Error(`Token error: ${res.status}`);
       }
       return await res.json();
     });
-  }, [personality]);
+  }, [personality, patientId]);
 
   const session = useSession(
     tokenSource,
@@ -94,12 +96,14 @@ function SessionInner({
 export function App({ appConfig }: AppProps) {
   const [selectedPersonality, setSelectedPersonality] = useState('trader');
   const [activePersonality, setActivePersonality] = useState('trader');
+  const [activePatientId, setActivePatientId] = useState('');
   const [sessionId, setSessionId] = useState(0);
   const [autoConnect, setAutoConnect] = useState(false);
 
-  const handleStartCall = useCallback((personality: string) => {
+  const handleStartCall = useCallback((personality: string, patientId?: string) => {
     setSelectedPersonality(personality);
     setActivePersonality(personality);
+    setActivePatientId(patientId || '');
     setAutoConnect(true);
     setSessionId((prev) => prev + 1);
   }, []);
@@ -113,6 +117,7 @@ export function App({ appConfig }: AppProps) {
       key={sessionId}
       appConfig={appConfig}
       personality={activePersonality}
+      patientId={activePatientId}
       autoConnect={autoConnect}
       selectedPersonality={selectedPersonality}
       onSelectPersonality={setSelectedPersonality}

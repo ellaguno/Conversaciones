@@ -6,8 +6,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
 import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
-import { WelcomeView } from '@/components/app/welcome-view';
 import { NotesView } from '@/components/app/notes-view';
+import { WelcomeView } from '@/components/app/welcome-view';
 
 const MotionWelcomeView = motion.create(WelcomeView);
 const MotionSessionView = motion.create(AgentSessionView_01);
@@ -28,7 +28,7 @@ interface ViewControllerProps {
   selectedPersonality: string;
   activePersonality: string;
   onSelectPersonality: (personality: string) => void;
-  onStartCall: (personality: string) => void;
+  onStartCall: (personality: string, patientId?: string) => void;
   autoConnect?: boolean;
   onDisconnected?: () => void;
 }
@@ -69,9 +69,9 @@ export function ViewController({
     return (
       <NotesView
         onBack={() => setShowNotes(false)}
-        onStartSession={() => {
+        onStartSession={(patientId?: string) => {
           setShowNotes(false);
-          onStartCall('psicologo');
+          onStartCall('psicologo', patientId);
         }}
       />
     );
@@ -104,10 +104,12 @@ export function ViewController({
           }
           audioVisualizerColor={
             activePersonality === 'psicologo'
-              ? (resolvedTheme === 'dark' ? '#7c3aed' : '#8b5cf6')
-              : (resolvedTheme === 'dark'
-                  ? appConfig.audioVisualizerColorDark
-                  : appConfig.audioVisualizerColor)
+              ? resolvedTheme === 'dark'
+                ? '#7c3aed'
+                : '#8b5cf6'
+              : resolvedTheme === 'dark'
+                ? appConfig.audioVisualizerColorDark
+                : appConfig.audioVisualizerColor
           }
           audioVisualizerColorShift={appConfig.audioVisualizerColorShift}
           audioVisualizerBarCount={appConfig.audioVisualizerBarCount}

@@ -122,3 +122,107 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* TipTap editor styles */
+.tiptap-editor {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+
+.tiptap-editor h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tiptap-editor h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.375rem;
+}
+
+.tiptap-editor h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.tiptap-editor p {
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-editor ul,
+.tiptap-editor ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-editor ul {
+  list-style-type: disc;
+}
+
+.tiptap-editor ol {
+  list-style-type: decimal;
+}
+
+.tiptap-editor li {
+  margin-bottom: 0.15rem;
+}
+
+.tiptap-editor li p {
+  margin-bottom: 0.125rem;
+}
+
+.tiptap-editor blockquote {
+  border-left: 3px solid oklch(0.627 0.265 303.9);
+  padding-left: 0.75rem;
+  margin: 0.75rem 0;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.tiptap-editor hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+
+.tiptap-editor strong {
+  font-weight: 600;
+}
+
+.tiptap-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap-editor ul[data-type="taskList"] li label {
+  margin-top: 0.15rem;
+}
+
+.tiptap-editor ul[data-type="taskList"] li label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: oklch(0.627 0.265 303.9);
+  cursor: pointer;
+}
+
+.tiptap-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  height: 0;
+}

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MarkdownEditor } from './markdown-editor';
 
 interface SessionFile {
   filename: string;
@@ -23,14 +24,7 @@ interface PatientData {
   progress: string | null;
 }
 
-type NoteTab =
-  | 'sesiones'
-  | 'perfil'
-  | 'resumen'
-  | 'plan'
-  | 'temas'
-  | 'progreso'
-  | 'agenda';
+type NoteTab = 'sesiones' | 'perfil' | 'resumen' | 'plan' | 'temas' | 'progreso' | 'agenda';
 
 const TABS: { key: NoteTab; label: string; icon: string }[] = [
   { key: 'sesiones', label: 'Sesiones', icon: '📋' },
@@ -42,36 +36,47 @@ const TABS: { key: NoteTab; label: string; icon: string }[] = [
   { key: 'agenda', label: 'Agenda', icon: '📅' },
 ];
 
+const TAB_NOTE_TYPE: Record<NoteTab, string> = {
+  sesiones: 'session',
+  perfil: 'profile',
+  resumen: 'generalSummary',
+  plan: 'treatmentPlan',
+  temas: 'recurringThemes',
+  progreso: 'progress',
+  agenda: 'agenda',
+};
+
+// --- Markdown viewer with custom components ---
 function MarkdownContent({ content, title }: { content: string; title?: string }) {
   const cleaned = content.replace(/^```markdown\s*\n?/i, '').replace(/\n?```\s*$/i, '');
   return (
-    <article className="notes-markdown">
-      {title && <h2 className="notes-title">{title}</h2>}
+    <article>
+      {title && <h2 className="text-foreground mb-4 text-lg font-bold">{title}</h2>}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-4 mt-6 text-xl font-bold text-foreground border-b border-border pb-2">
+            <h1 className="text-foreground border-border mt-6 mb-4 border-b pb-2 text-xl font-bold">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-3 mt-5 text-lg font-bold text-foreground flex items-center gap-2">
+            <h2 className="text-foreground mt-5 mb-3 flex items-center gap-2 text-lg font-bold">
               <span className="inline-block h-5 w-1 rounded-full bg-purple-500" />
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-2 mt-4 text-base font-semibold text-foreground">{children}</h3>
+            <h3 className="text-foreground mt-4 mb-2 text-base font-semibold">{children}</h3>
           ),
           p: ({ children }) => (
-            <p className="mb-3 text-sm leading-relaxed text-foreground/80">{children}</p>
+            <p className="text-foreground/80 mb-3 text-sm leading-relaxed">{children}</p>
           ),
           ul: ({ children }) => (
-            <ul className="mb-3 ml-1 space-y-1.5 text-sm text-foreground/80">{children}</ul>
+            <ul className="text-foreground/80 mb-3 ml-1 space-y-1.5 text-sm">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="mb-3 ml-1 list-decimal space-y-1.5 pl-4 text-sm text-foreground/80">
+            <ol className="text-foreground/80 mb-3 ml-1 list-decimal space-y-1.5 pl-4 text-sm">
               {children}
             </ol>
           ),
@@ -82,29 +87,28 @@ function MarkdownContent({ content, title }: { content: string; title?: string }
             </li>
           ),
           strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
+            <strong className="text-foreground font-semibold">{children}</strong>
           ),
-          hr: () => <hr className="my-4 border-border" />,
+          hr: () => <hr className="border-border my-4" />,
           blockquote: ({ children }) => (
-            <blockquote className="my-3 border-l-3 border-purple-400 bg-purple-50 dark:bg-purple-950/20 py-2 pl-4 pr-3 rounded-r-lg text-sm italic text-foreground/70">
+            <blockquote className="text-foreground/70 my-3 rounded-r-lg border-l-3 border-purple-400 bg-purple-50 py-2 pr-3 pl-4 text-sm italic dark:bg-purple-950/20">
               {children}
             </blockquote>
           ),
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-lg border border-border">
+            <div className="border-border my-3 overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">{children}</table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-muted/50 text-xs font-semibold uppercase text-muted-foreground">
+            <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold uppercase">
               {children}
             </thead>
           ),
           td: ({ children }) => (
-            <td className="border-t border-border px-3 py-2 text-foreground/80">{children}</td>
+            <td className="border-border text-foreground/80 border-t px-3 py-2">{children}</td>
           ),
           th: ({ children }) => <th className="px-3 py-2 text-left">{children}</th>,
-          // Render checkbox-style task items
           input: (props) => {
             if (props.type === 'checkbox') {
               return (
@@ -131,7 +135,7 @@ function MarkdownContent({ content, title }: { content: string; title?: string }
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+    <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
       <div className="mb-3 text-4xl opacity-30">📄</div>
       <p className="text-sm">{message}</p>
     </div>
@@ -140,15 +144,83 @@ function EmptyState({ message }: { message: string }) {
 
 function ChevronLeft({ size = 18 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M15 18l-6-6 6-6" />
     </svg>
   );
 }
 
+function ConfirmDialog({
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="border-border bg-background w-full max-w-sm rounded-2xl border p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-foreground mb-4 text-sm">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="border-border text-muted-foreground hover:text-foreground rounded-lg border px-4 py-2 text-xs font-medium transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-red-700"
+          >
+            Borrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Action buttons for view mode ---
+function NoteActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex gap-1.5">
+      <button
+        onClick={onEdit}
+        className="border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+        title="Editar"
+      >
+        Editar
+      </button>
+      <button
+        onClick={onDelete}
+        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+        title="Borrar"
+      >
+        Borrar
+      </button>
+    </div>
+  );
+}
+
+// --- Main component ---
 interface NotesViewProps {
   onBack: () => void;
-  onStartSession: () => void;
+  onStartSession: (patientId?: string) => void;
 }
 
 export function NotesView({ onBack, onStartSession }: NotesViewProps) {
@@ -157,78 +229,234 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
   const [activeTab, setActiveTab] = useState<NoteTab>('sesiones');
   const [sessionContent, setSessionContent] = useState<string | null>(null);
   const [viewingSession, setViewingSession] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<{
+    noteType: string;
+    filename?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [newPatientName, setNewPatientName] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     fetch('/api/sessions')
       .then((r) => r.json())
       .then((data) => {
-        setPatients(data.patients || []);
-        if (data.patients?.length === 1) {
-          setSelectedPatient(data.patients[0]);
-        }
+        const list: PatientData[] = data.patients || [];
+        setPatients(list);
+        setSelectedPatient((prev) => {
+          if (prev) {
+            // Preserve selection, update data
+            const updated = list.find((p) => p.id === prev.id);
+            return updated || (list.length > 0 ? list[0] : null);
+          }
+          return list.length > 0 ? list[0] : null;
+        });
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  // Scroll to top when changing tabs or viewing a session
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   useEffect(() => {
     contentRef.current?.scrollTo(0, 0);
-  }, [activeTab, viewingSession]);
+  }, [activeTab, viewingSession, editing]);
 
   const handleViewSession = async (filename: string) => {
     try {
-      const res = await fetch(`/api/sessions/${filename}`);
+      const res = await fetch(
+        `/api/sessions/${filename}?patientId=${encodeURIComponent(selectedPatient!.id)}`
+      );
       const data = await res.json();
       setSessionContent(data.content);
       setViewingSession(filename);
+      setEditing(false);
     } catch {
       setSessionContent('Error al cargar la nota.');
       setViewingSession(filename);
     }
   };
 
+  const getNoteContent = (): string | null => {
+    if (!selectedPatient) return null;
+    const map: Record<NoteTab, string | null> = {
+      sesiones: null,
+      perfil: selectedPatient.profile,
+      resumen: selectedPatient.generalSummary,
+      plan: selectedPatient.treatmentPlan,
+      temas: selectedPatient.recurringThemes,
+      progreso: selectedPatient.progress,
+      agenda: selectedPatient.agenda,
+    };
+    return map[activeTab];
+  };
+
+  const handleStartEdit = () => {
+    const content = activeTab === 'sesiones' && viewingSession ? sessionContent : getNoteContent();
+    if (content) {
+      setEditContent(content);
+      setEditing(true);
+    }
+  };
+
+  const handleSave = async (markdown: string) => {
+    const noteType = activeTab === 'sesiones' ? 'session' : TAB_NOTE_TYPE[activeTab];
+    const body: Record<string, string> = {
+      noteType,
+      content: markdown,
+      patientId: selectedPatient!.id,
+    };
+    if (activeTab === 'sesiones' && viewingSession) {
+      body.filename = viewingSession;
+    }
+
+    try {
+      await fetch('/api/sessions/notes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setEditing(false);
+      // Reload data
+      if (activeTab === 'sesiones' && viewingSession) {
+        setSessionContent(markdown);
+      }
+      fetchData();
+    } catch {
+      alert('Error al guardar');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await fetch('/api/sessions/notes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...confirmDelete, patientId: selectedPatient!.id }),
+      });
+      setConfirmDelete(null);
+      setEditing(false);
+      if (confirmDelete.noteType === 'session') {
+        setViewingSession(null);
+        setSessionContent(null);
+      }
+      fetchData();
+    } catch {
+      alert('Error al borrar');
+    }
+  };
+
+  const handleRequestDelete = () => {
+    const noteType = activeTab === 'sesiones' ? 'session' : TAB_NOTE_TYPE[activeTab];
+    const payload: { noteType: string; filename?: string } = { noteType };
+    if (activeTab === 'sesiones' && viewingSession) {
+      payload.filename = viewingSession;
+    }
+    setConfirmDelete(payload);
+  };
+
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background text-muted-foreground">
+      <div className="bg-background text-muted-foreground fixed inset-0 flex items-center justify-center">
         <p className="text-sm">Cargando...</p>
       </div>
     );
   }
 
+  const handleCreatePatient = () => {
+    if (!newPatientName.trim()) return;
+    // Convert name to a safe directory id: lowercase, spaces to underscores
+    const patientId = newPatientName
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_-]/g, '');
+    if (!patientId) return;
+    setCreatingPatient(false);
+    setNewPatientName('');
+    // Start a session directly — the agent will create the patient directory on first session
+    onStartSession(patientId);
+  };
+
   // Patient list view
   if (!selectedPatient) {
     return (
-      <div className="fixed inset-0 overflow-y-auto bg-background">
+      <div className="bg-background fixed inset-0 overflow-y-auto">
         <div className="mx-auto w-full max-w-lg px-4 py-8">
           <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-foreground">Pacientes</h2>
+            <h2 className="text-foreground text-xl font-bold">Pacientes</h2>
             <button
               onClick={onBack}
-              className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="border-border text-muted-foreground hover:text-foreground rounded-full border px-4 py-1.5 text-xs font-medium transition-colors"
             >
               Volver
             </button>
           </div>
 
+          {/* New patient form */}
+          {creatingPatient ? (
+            <div className="mb-4 rounded-xl border-2 border-purple-300 bg-purple-50 p-4 dark:border-purple-700 dark:bg-purple-950/30">
+              <p className="text-foreground mb-3 text-sm font-semibold">Nuevo paciente</p>
+              <input
+                type="text"
+                value={newPatientName}
+                onChange={(e) => setNewPatientName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreatePatient()}
+                placeholder="Nombre del paciente"
+                autoFocus
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground mb-3 w-full rounded-lg border px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreatePatient}
+                  disabled={!newPatientName.trim()}
+                  className="rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+                >
+                  Iniciar primera sesion
+                </button>
+                <button
+                  onClick={() => {
+                    setCreatingPatient(false);
+                    setNewPatientName('');
+                  }}
+                  className="border-border text-muted-foreground hover:text-foreground rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCreatingPatient(true)}
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-purple-300 p-4 text-sm font-medium text-purple-600 transition-colors hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20"
+            >
+              <span className="text-lg">+</span>
+              Nuevo paciente
+            </button>
+          )}
+
           {patients.length === 0 ? (
-            <EmptyState message="No hay pacientes registrados. Inicia una sesion con la Dra. Ana." />
+            <EmptyState message="No hay pacientes registrados. Crea uno nuevo para comenzar." />
           ) : (
             <div className="flex flex-col gap-2">
               {patients.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedPatient(p)}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-purple-400 hover:shadow-md"
+                  className="border-border bg-card flex items-center gap-3 rounded-xl border p-4 text-left transition-all hover:border-purple-400 hover:shadow-md"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/40 text-lg">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg dark:bg-purple-900/40">
                     👤
                   </div>
                   <div>
-                    <p className="font-semibold text-foreground">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-foreground font-semibold">{p.name}</p>
+                    <p className="text-muted-foreground text-xs">
                       {p.sessions.length} {p.sessions.length === 1 ? 'sesion' : 'sesiones'}
                     </p>
                   </div>
@@ -241,44 +469,47 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
     );
   }
 
-  // Tab content
-  const tabContent: Record<NoteTab, React.ReactNode> = {
-    sesiones: (
-      <div className="flex flex-col gap-2">
-        {selectedPatient.sessions.length === 0 ? (
-          <EmptyState message="No hay sesiones registradas." />
-        ) : (
-          [...selectedPatient.sessions].reverse().map((s) => (
-            <button
-              key={s.filename}
-              onClick={() => handleViewSession(s.filename)}
-              className="group flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3.5 text-left transition-all hover:border-purple-400 hover:shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30 text-xs font-bold text-purple-700 dark:text-purple-300">
-                  {s.title.replace('Sesion ', '#')}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{s.title}</p>
-                  <p className="text-xs text-muted-foreground">{s.date}</p>
-                </div>
+  // Session list
+  const sessionsList = (
+    <div className="flex flex-col gap-2">
+      {selectedPatient.sessions.length === 0 ? (
+        <EmptyState message="No hay sesiones registradas." />
+      ) : (
+        [...selectedPatient.sessions].reverse().map((s) => (
+          <button
+            key={s.filename}
+            onClick={() => handleViewSession(s.filename)}
+            className="group border-border bg-background flex items-center justify-between rounded-xl border px-4 py-3.5 text-left transition-all hover:border-purple-400 hover:shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-xs font-bold text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                {s.title.replace('Sesion ', '#')}
               </div>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="text-muted-foreground transition-transform group-hover:translate-x-0.5"
-              >
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-          ))
-        )}
-      </div>
-    ),
+              <div>
+                <p className="text-foreground text-sm font-medium">{s.title}</p>
+                <p className="text-muted-foreground text-xs">{s.date}</p>
+              </div>
+            </div>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        ))
+      )}
+    </div>
+  );
+
+  // Tab content map (read mode)
+  const tabViewContent: Record<NoteTab, React.ReactNode> = {
+    sesiones: sessionsList,
     perfil: selectedPatient.profile ? (
       <MarkdownContent content={selectedPatient.profile} title="Perfil del paciente" />
     ) : (
@@ -311,36 +542,94 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
     ),
   };
 
+  // What to render in the content area
+  let contentView: React.ReactNode;
+
+  if (editing) {
+    contentView = (
+      <MarkdownEditor
+        content={editContent}
+        onSave={handleSave}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  } else if (activeTab === 'sesiones' && viewingSession && sessionContent) {
+    contentView = (
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={() => {
+              setViewingSession(null);
+              setSessionContent(null);
+            }}
+            className="flex items-center gap-1 text-xs font-medium text-purple-600 transition-colors hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300"
+          >
+            <ChevronLeft size={14} />
+            Volver a sesiones
+          </button>
+          <NoteActions onEdit={handleStartEdit} onDelete={handleRequestDelete} />
+        </div>
+        <MarkdownContent content={sessionContent} />
+      </div>
+    );
+  } else if (activeTab !== 'sesiones') {
+    const content = getNoteContent();
+    contentView = content ? (
+      <div>
+        <div className="mb-4 flex justify-end">
+          <NoteActions onEdit={handleStartEdit} onDelete={handleRequestDelete} />
+        </div>
+        {tabViewContent[activeTab]}
+      </div>
+    ) : (
+      tabViewContent[activeTab]
+    );
+  } else {
+    contentView = tabViewContent[activeTab];
+  }
+
   return (
-    <div className="fixed inset-0 flex flex-col bg-background">
+    <div className="bg-background fixed inset-0 flex flex-col">
+      {/* Confirm dialog */}
+      {confirmDelete && (
+        <ConfirmDialog
+          message="¿Estas seguro de que quieres borrar esta nota? Esta accion no se puede deshacer."
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
       {/* Fixed header */}
-      <header className="flex-shrink-0 border-b border-border bg-background/95 backdrop-blur-sm px-4 py-3">
+      <header className="border-border bg-background/95 flex-shrink-0 border-b px-4 py-3 backdrop-blur-sm">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <div className="flex items-center gap-2">
             <button
               onClick={patients.length > 1 ? () => setSelectedPatient(null) : onBack}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted transition-colors"
+              className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
               title="Volver"
             >
               <ChevronLeft />
             </button>
             <div>
-              <h2 className="text-base font-bold text-foreground leading-tight">{selectedPatient.name}</h2>
-              <p className="text-[11px] text-muted-foreground">
-                {selectedPatient.sessions.length} sesiones &middot; Proxima: #{selectedPatient.sessionNumber}
+              <h2 className="text-foreground text-base leading-tight font-bold">
+                {selectedPatient.name}
+              </h2>
+              <p className="text-muted-foreground text-[11px]">
+                {selectedPatient.sessions.length} sesiones &middot; Proxima: #
+                {selectedPatient.sessionNumber}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={onStartSession}
-              className="rounded-full bg-purple-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-purple-700 transition-colors"
+              onClick={() => onStartSession(selectedPatient.id)}
+              className="rounded-full bg-purple-600 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-purple-700"
             >
               Iniciar sesion
             </button>
             <button
               onClick={onBack}
-              className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="border-border text-muted-foreground hover:text-foreground rounded-full border px-4 py-1.5 text-xs font-medium transition-colors"
             >
               Inicio
             </button>
@@ -349,18 +638,20 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
       </header>
 
       {/* Fixed tabs */}
-      <nav className="flex-shrink-0 border-b border-border bg-background px-4 py-2">
-        <div className="mx-auto flex max-w-2xl gap-1 overflow-x-auto scrollbar-none">
+      <nav className="border-border bg-background flex-shrink-0 border-b px-4 py-2">
+        <div className="scrollbar-none mx-auto flex max-w-2xl gap-1 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => {
                 setActiveTab(tab.key);
                 setViewingSession(null);
+                setSessionContent(null);
+                setEditing(false);
               }}
-              className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all ${
                 activeTab === tab.key
-                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
@@ -372,23 +663,8 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
       </nav>
 
       {/* Scrollable content */}
-      <div ref={contentRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-4 py-5 pb-16">
-          {viewingSession && sessionContent ? (
-            <div>
-              <button
-                onClick={() => setViewingSession(null)}
-                className="mb-4 flex items-center gap-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors"
-              >
-                <ChevronLeft size={14} />
-                Volver a sesiones
-              </button>
-              <MarkdownContent content={sessionContent} />
-            </div>
-          ) : (
-            tabContent[activeTab]
-          )}
-        </div>
+      <div ref={contentRef} className={`flex-1 overflow-y-auto ${editing ? '' : ''}`}>
+        <div className="mx-auto max-w-2xl px-4 py-5 pb-16">{contentView}</div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');

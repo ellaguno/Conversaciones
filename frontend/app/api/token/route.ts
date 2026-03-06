@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { AccessToken, type AccessTokenOptions, type VideoGrant, RoomServiceClient } from 'livekit-server-sdk';
+import {
+  AccessToken,
+  type AccessTokenOptions,
+  RoomServiceClient,
+  type VideoGrant,
+} from 'livekit-server-sdk';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -28,10 +33,14 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const personality = body?.personality || 'trader';
+    const patientId = body?.patientId || '';
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `room_${personality}_${Math.floor(Math.random() * 10_000)}`;
+    const roomName =
+      personality === 'psicologo' && patientId
+        ? `room_${personality}_${patientId}_${Math.floor(Math.random() * 10_000)}`
+        : `room_${personality}_${Math.floor(Math.random() * 10_000)}`;
 
     // Create room with metadata via RoomService API
     const httpUrl = LIVEKIT_URL.replace('wss://', 'https://');
@@ -65,10 +74,7 @@ export async function POST(req: Request) {
   }
 }
 
-function createParticipantToken(
-  userInfo: AccessTokenOptions,
-  roomName: string
-): Promise<string> {
+function createParticipantToken(userInfo: AccessTokenOptions, roomName: string): Promise<string> {
   const at = new AccessToken(API_KEY, API_SECRET, {
     ...userInfo,
     ttl: '15m',

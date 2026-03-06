@@ -36,8 +36,9 @@ interface Metrics {
   llm_calls: number;
 }
 
-interface SessionInfo {
-  patientName: string;
+interface PatientInfo {
+  id: string;
+  name: string;
   sessionNumber: number;
   sessionsCount: number;
 }
@@ -46,7 +47,7 @@ interface WelcomeViewProps {
   startButtonText: string;
   selectedPersonality: string;
   onSelectPersonality: (personality: string) => void;
-  onStartCall: (personality: string) => void;
+  onStartCall: (personality: string, patientId?: string) => void;
   onViewNotes?: () => void;
 }
 
@@ -59,7 +60,10 @@ export const WelcomeView = ({
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+  const [patients, setPatients] = useState<PatientInfo[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [newPatientName, setNewPatientName] = useState('');
 
   useEffect(() => {
     fetch('/api/metrics')
@@ -73,18 +77,22 @@ export const WelcomeView = ({
       fetch('/api/sessions')
         .then((r) => r.json())
         .then((data) => {
-          if (data.patients?.length > 0) {
-            const p = data.patients[0];
-            setSessionInfo({
-              patientName: p.name,
+          const list: PatientInfo[] = (data.patients || []).map(
+            (p: { id: string; name: string; sessionNumber: number; sessions: unknown[] }) => ({
+              id: p.id,
+              name: p.name,
               sessionNumber: p.sessionNumber,
               sessionsCount: p.sessions.length,
-            });
+            })
+          );
+          setPatients(list);
+          if (list.length > 0 && !selectedPatientId) {
+            setSelectedPatientId(list[0].id);
           }
         })
         .catch(() => {});
     }
-  }, [selectedPersonality]);
+  }, [selectedPersonality, selectedPatientId]);
 
   const isPsicologo = selectedPersonality === 'psicologo';
   const today = new Date().toLocaleDateString('es-MX', {
@@ -96,12 +104,12 @@ export const WelcomeView = ({
 
   return (
     <div ref={ref}>
-      <section className="bg-background flex flex-col items-center justify-center text-center px-4">
+      <section className="bg-background flex flex-col items-center justify-center px-4 text-center">
         <h1 className="text-foreground mb-1 text-2xl font-bold">Conversaciones</h1>
 
         {/* Metrics bar */}
         {metrics && metrics.total_tokens > 0 && (
-          <div className="mb-4 flex items-center gap-4 rounded-full border border-border bg-muted/40 px-4 py-1.5 text-[11px] text-muted-foreground font-mono">
+          <div className="border-border bg-muted/40 text-muted-foreground mb-4 flex items-center gap-4 rounded-full border px-4 py-1.5 font-mono text-[11px]">
             <span>{metrics.total_tokens.toLocaleString()} tokens</span>
             <span className="text-border">|</span>
             <span>${metrics.total_cost_usd.toFixed(4)} USD</span>
@@ -112,7 +120,7 @@ export const WelcomeView = ({
 
         <p className="text-muted-foreground mb-5 text-sm">Elige con quien quieres hablar</p>
 
-        <div className="mb-5 grid grid-cols-2 gap-3 w-full max-w-sm">
+        <div className="mb-5 grid w-full max-w-sm grid-cols-2 gap-3">
           {PERSONALITIES.map((p) => (
             <button
               key={p.key}
@@ -130,44 +138,146 @@ export const WelcomeView = ({
           ))}
         </div>
 
-        {/* Dra. Ana session info */}
-        {isPsicologo && sessionInfo && (
-          <div className="mb-4 w-full max-w-sm rounded-xl border-2 border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/30 p-4 text-left">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-200 dark:bg-purple-800 text-sm">
-                👤
+        {/* Dra. Ana patient selector */}
+        {isPsicologo && (
+          <div className="mb-4 w-full max-w-sm">
+            {/* Patient list */}
+            {patients.length > 0 && (
+              <div className="mb-3 flex flex-col gap-1.5">
+                {patients.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setSelectedPatientId(p.id);
+                      setCreatingPatient(false);
+                    }}
+                    className={`flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
+                      selectedPatientId === p.id
+                        ? 'border-purple-400 bg-purple-50 shadow-sm dark:border-purple-600 dark:bg-purple-950/30'
+                        : 'border-border hover:border-purple-300 dark:hover:border-purple-700'
+                    }`}
+                  >
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-200 text-sm dark:bg-purple-800">
+                      👤
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-foreground truncate text-sm font-bold">{p.name}</p>
+                      <p className="text-muted-foreground text-[11px]">
+                        {p.sessionsCount} {p.sessionsCount === 1 ? 'sesion' : 'sesiones'} &middot;
+                        Proxima: #{p.sessionNumber}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div>
-                <p className="text-sm font-bold text-foreground">{sessionInfo.patientName}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {sessionInfo.sessionsCount} sesiones &middot; Proxima: #{sessionInfo.sessionNumber}
-                </p>
+            )}
+
+            {/* New patient form */}
+            {creatingPatient ? (
+              <div className="rounded-xl border-2 border-dashed border-purple-300 bg-purple-50 p-3 dark:border-purple-700 dark:bg-purple-950/20">
+                <input
+                  type="text"
+                  value={newPatientName}
+                  onChange={(e) => setNewPatientName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newPatientName.trim()) {
+                      const patientId = newPatientName
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^a-z0-9_-]/g, '');
+                      if (patientId) {
+                        setCreatingPatient(false);
+                        setNewPatientName('');
+                        onStartCall('psicologo', patientId);
+                      }
+                    }
+                    if (e.key === 'Escape') {
+                      setCreatingPatient(false);
+                      setNewPatientName('');
+                    }
+                  }}
+                  placeholder="Nombre del paciente"
+                  autoFocus
+                  className="border-border bg-background text-foreground placeholder:text-muted-foreground mb-2 w-full rounded-lg border px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const patientId = newPatientName
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^a-z0-9_-]/g, '');
+                      if (patientId) {
+                        setCreatingPatient(false);
+                        setNewPatientName('');
+                        onStartCall('psicologo', patientId);
+                      }
+                    }}
+                    disabled={!newPatientName.trim()}
+                    className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    Iniciar primera sesion
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreatingPatient(false);
+                      setNewPatientName('');
+                    }}
+                    className="border-border text-muted-foreground hover:text-foreground rounded-lg border px-3 py-1.5 text-xs transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground">{today}</p>
+            ) : (
+              <button
+                onClick={() => {
+                  setCreatingPatient(true);
+                  setSelectedPatientId(null);
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-purple-300 p-2.5 text-xs font-medium text-purple-600 transition-colors hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20"
+              >
+                <span className="text-base">+</span>
+                Nuevo paciente
+              </button>
+            )}
+
+            <p className="text-muted-foreground mt-2 text-center text-xs">{today}</p>
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="flex flex-col gap-2 w-64">
-          <Button
-            size="lg"
-            onClick={() => onStartCall(selectedPersonality)}
-            className={`w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase ${
-              isPsicologo ? 'bg-purple-600 hover:bg-purple-700' : ''
-            }`}
-          >
-            {isPsicologo ? 'Iniciar sesion' : startButtonText}
-          </Button>
-
-          {isPsicologo && onViewNotes && (
+        <div className="flex w-64 flex-col gap-2">
+          {isPsicologo ? (
+            <>
+              <Button
+                size="lg"
+                onClick={() => onStartCall('psicologo', selectedPatientId || undefined)}
+                disabled={!selectedPatientId}
+                className="w-full rounded-full bg-purple-600 font-mono text-xs font-bold tracking-wider uppercase hover:bg-purple-700 disabled:opacity-50"
+              >
+                Iniciar sesion
+              </Button>
+              {onViewNotes && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={onViewNotes}
+                  className="w-full rounded-full border-purple-300 font-mono text-xs font-bold tracking-wider text-purple-700 uppercase hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950/30"
+                >
+                  Ver notas
+                </Button>
+              )}
+            </>
+          ) : (
             <Button
               size="lg"
-              variant="outline"
-              onClick={onViewNotes}
-              className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+              onClick={() => onStartCall(selectedPersonality)}
+              className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
             >
-              Ver notas
+              {startButtonText}
             </Button>
           )}
         </div>
