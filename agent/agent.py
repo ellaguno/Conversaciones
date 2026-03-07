@@ -82,14 +82,16 @@ async def entrypoint(ctx: JobContext):
             patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
             logger.info(f"Patient ID: '{patient_id}'")
 
-    # Parse room metadata for custom voice/temperature/therapy config
+    # Parse room metadata for custom voice/temperature/model/therapy config
     room_metadata = room.metadata or ""
+    custom_model = None
     therapy_method = None
     couple_therapy = False
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
         custom_temperature = meta.get("temperature")
+        custom_model = meta.get("model")
         therapy_method = meta.get("therapyMethod")
         couple_therapy = bool(meta.get("coupleTherapy", False))
     except (json.JSONDecodeError, TypeError):
@@ -136,10 +138,11 @@ async def entrypoint(ctx: JobContext):
     # Conversation log for all personalities
     conv_log = ConversationLog(personality_key, personality["name"])
 
-    # Use custom voice/temperature if provided, otherwise use personality defaults
+    # Use custom voice/temperature/model if provided, otherwise use personality defaults
     voice_id = custom_voice_id or personality["voice_id"]
     temperature = custom_temperature if custom_temperature is not None else 0.7
-    logger.info(f"Voice: {voice_id}, Temperature: {temperature}")
+    llm_model = custom_model or "google/gemini-2.0-flash-001"
+    logger.info(f"Voice: {voice_id}, Temperature: {temperature}, Model: {llm_model}")
 
     session = AgentSession(
         stt=deepgram.STT(
@@ -147,7 +150,7 @@ async def entrypoint(ctx: JobContext):
             language="es",
         ),
         llm=openai.LLM(
-            model="google/gemini-2.0-flash-001",
+            model=llm_model,
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENAI_API_KEY"),
             temperature=temperature,

@@ -72,6 +72,7 @@ function SessionInner({
           patientId,
           voiceId: personalityConfig.voiceId,
           temperature: personalityConfig.temperature,
+          model: personalityConfig.model,
           ...(therapyMethod && { therapyMethod }),
           ...(coupleTherapy && { coupleTherapy }),
         }),
@@ -86,6 +87,7 @@ function SessionInner({
     patientId,
     personalityConfig.voiceId,
     personalityConfig.temperature,
+    personalityConfig.model,
     therapyMethod,
     coupleTherapy,
   ]);

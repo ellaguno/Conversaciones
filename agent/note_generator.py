@@ -7,7 +7,13 @@ from session_manager import SessionManager
 
 logger = logging.getLogger("comerciante-con-voz")
 
-MODEL = "google/gemini-2.0-flash-001"
+# Conversation model (fast, cheap) — used as fallback for simple tasks like agenda
+FAST_MODEL = "google/gemini-2.0-flash-001"
+
+# Analysis model (intelligent, slower) — used for clinical notes, plans, profiles
+# Claude Sonnet 4.6 via OpenRouter for superior analysis quality
+ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "anthropic/claude-sonnet-4")
+
 _client = None
 
 
@@ -34,35 +40,38 @@ async def generate_session_notes(
         for t in transcript
     )
 
-    logger.info(f"Generando notas para sesión {session_num} ({duration_min} min, {len(transcript)} turnos)")
+    logger.info(
+        f"Generando notas para sesión {session_num} ({duration_min} min, {len(transcript)} turnos) "
+        f"con modelo de análisis: {ANALYSIS_MODEL}"
+    )
 
-    # 1. Generate session file
+    # 1. Generate session file (analysis model — clinical quality matters)
     session_content = await _generate_session_file(transcript_text, session_num, duration_min)
     manager.save_session(session_num, session_content)
     logger.info(f"Sesión {session_num} guardada")
 
-    # 2. Update general summary
+    # 2. Update general summary (analysis model)
     existing_summary = manager.get_general_summary()
     new_summary = await _update_general_summary(existing_summary, session_content, session_num)
     manager.save_general_summary(new_summary)
 
-    # 3. Update treatment plan if needed (after session 1, and every 3 sessions)
+    # 3. Update treatment plan if needed (analysis model — most important)
     if session_num == 1 or session_num % 3 == 0:
         existing_plan = manager.get_treatment_plan()
         new_plan = await _update_treatment_plan(existing_plan, session_content, existing_summary)
         manager.save_treatment_plan(new_plan)
 
-    # 4. Update recurring themes
+    # 4. Update recurring themes (analysis model)
     existing_themes = manager.get_recurring_themes()
     new_themes = await _update_recurring_themes(existing_themes, session_content)
     manager.save_recurring_themes(new_themes)
 
-    # 5. Update progress
+    # 5. Update progress (analysis model)
     existing_progress = manager.get_progress()
     new_progress = await _update_progress(existing_progress, session_content)
     manager.save_progress(new_progress)
 
-    # 6. Update agenda
+    # 6. Update agenda (fast model — simple scheduling task)
     await _update_agenda(manager, session_num)
 
     logger.info(f"Todas las notas de sesión {session_num} generadas")
@@ -79,15 +88,15 @@ async def generate_intake_notes(
         for t in transcript
     )
 
-    # Generate profile
+    # Generate profile (analysis model — critical first impression)
     profile = await _generate_profile(transcript_text)
     manager.save_profile(profile)
 
-    # Generate initial treatment plan
+    # Generate initial treatment plan (analysis model — sets therapy direction)
     plan = await _generate_initial_plan(transcript_text)
     manager.save_treatment_plan(plan)
 
-    # Generate agenda
+    # Generate agenda (fast model — simple scheduling)
     agenda = await _generate_initial_agenda(transcript_text)
     manager.save_agenda(agenda)
 
@@ -99,9 +108,10 @@ def _date_context() -> str:
     return f"FECHA ACTUAL: {date.today().isoformat()} ({date.today().strftime('%d de %B de %Y')}). Usa SIEMPRE esta fecha, NO inventes otra."
 
 
-async def _llm_call(system: str, user: str) -> str:
+async def _llm_call(system: str, user: str, model: str = ANALYSIS_MODEL) -> str:
+    """Make an LLM call. Uses ANALYSIS_MODEL by default for clinical quality."""
     resp = await _get_client().chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -116,9 +126,10 @@ async def _generate_session_file(transcript: str, session_num: int, duration_min
     today_iso = date.today().isoformat()
     return await _llm_call(
         system=(
-            "Eres un psicólogo supervisor que revisa transcripciones de sesiones terapéuticas. "
-            "Genera notas clínicas en formato Markdown siguiendo EXACTAMENTE esta estructura. "
-            "Sé conciso pero completo. Escribe en español."
+            "Eres un psicólogo supervisor experto que revisa transcripciones de sesiones terapéuticas. "
+            "Genera notas clínicas detalladas y profesionales en formato Markdown siguiendo EXACTAMENTE esta estructura. "
+            "Sé preciso en las observaciones clínicas, identifica distorsiones cognitivas, mecanismos de defensa, "
+            "y patrones de comportamiento. Escribe en español."
         ),
         user=f"""{_date_context()}
 
@@ -136,13 +147,15 @@ Genera las notas de la siguiente sesión terapéutica:
 [Resumen de 3-5 párrafos de los temas principales discutidos]
 
 ## Notas clínicas
-[Observaciones profesionales en viñetas]
+[Observaciones profesionales detalladas en viñetas: distorsiones cognitivas identificadas,
+mecanismos de defensa observados, patrones de comportamiento, insight del paciente,
+alianza terapéutica, y áreas de riesgo si las hay]
 
 ## Tareas para el paciente
 [Tareas acordadas o sugeridas, en formato - [ ] tarea]
 
 ## Temas para próxima sesión
-[Temas a retomar]
+[Temas a retomar, priorizados por importancia clínica]
 
 ---
 TRANSCRIPCIÓN:
@@ -153,9 +166,10 @@ TRANSCRIPCIÓN:
 async def _update_general_summary(existing: str, session_notes: str, session_num: int) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo supervisor. Actualiza el resumen general del tratamiento "
+            "Eres un psicólogo supervisor experto. Actualiza el resumen general del tratamiento "
             "incorporando la información de la última sesión. Mantén un formato claro y "
-            "cronológico. Si no hay resumen previo, crea uno nuevo. Escribe en español."
+            "cronológico. Destaca evolución del paciente, cambios significativos y áreas de preocupación. "
+            "Si no hay resumen previo, crea uno nuevo. Escribe en español."
         ),
         user=f"""{_date_context()}
 
@@ -172,8 +186,10 @@ Genera el resumen general actualizado en Markdown.""",
 async def _update_treatment_plan(existing: str, session_notes: str, summary: str) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo supervisor. Actualiza el plan terapéutico basándote en "
-            "el progreso del paciente. Incluye objetivos, técnicas a usar y metas. "
+            "Eres un psicólogo supervisor experto. Actualiza el plan terapéutico basándote en "
+            "el progreso del paciente. Incluye: objetivos a corto y largo plazo, técnicas específicas "
+            "del enfoque terapéutico a aplicar, metas medibles, indicadores de progreso, "
+            "y ajustes necesarios al plan. Sé específico y basado en evidencia. "
             "Escribe en español."
         ),
         user=f"""{_date_context()}
@@ -194,13 +210,16 @@ Genera el plan terapéutico actualizado en Markdown.""",
 async def _generate_profile(transcript: str) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo que genera el perfil inicial de un paciente a partir de "
-            "la sesión de intake. Extrae: nombre, datos relevantes, motivo de consulta, "
-            "antecedentes mencionados, y objetivos expresados. Escribe en español."
+            "Eres un psicólogo experto que genera el perfil clínico inicial de un paciente a partir de "
+            "la sesión de intake. Extrae y organiza: nombre completo, datos demográficos relevantes, "
+            "motivo de consulta (presentado vs subyacente), antecedentes mencionados, "
+            "historia relevante, fortalezas y recursos del paciente, factores de riesgo, "
+            "objetivos expresados por el paciente, e impresión diagnóstica preliminar (si aplica). "
+            "Escribe en español."
         ),
         user=f"""{_date_context()}
 
-A partir de esta transcripción de sesión de intake, genera el perfil del paciente en Markdown:
+A partir de esta transcripción de sesión de intake, genera el perfil clínico del paciente en Markdown:
 
 {transcript}""",
     )
@@ -209,19 +228,22 @@ A partir de esta transcripción de sesión de intake, genera el perfil del pacie
 async def _generate_initial_plan(transcript: str) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo que genera un plan terapéutico inicial basándose en la "
-            "sesión de intake. Incluye: objetivos, enfoque terapéutico sugerido, "
-            "frecuencia recomendada, y primeras áreas de trabajo. Escribe en español."
+            "Eres un psicólogo experto que genera un plan terapéutico inicial basándose en la "
+            "sesión de intake. Incluye: objetivos terapéuticos priorizados, enfoque terapéutico "
+            "con justificación, técnicas específicas a emplear, frecuencia recomendada con justificación, "
+            "primeras áreas de trabajo, criterios de evaluación de progreso, "
+            "y plan de intervención en crisis si aplica. Escribe en español."
         ),
         user=f"""{_date_context()}
 
-A partir de esta sesión de intake, genera un plan terapéutico inicial en Markdown:
+A partir de esta sesión de intake, genera un plan terapéutico inicial detallado en Markdown:
 
 {transcript}""",
     )
 
 
 async def _generate_initial_agenda(transcript: str) -> str:
+    """Uses fast model — simple scheduling task."""
     return await _llm_call(
         system=(
             "Eres un psicólogo que genera la agenda de sesiones. Extrae la frecuencia "
@@ -233,14 +255,16 @@ async def _generate_initial_agenda(transcript: str) -> str:
 Hoy es {date.today().isoformat()}.
 
 {transcript}""",
+        model=FAST_MODEL,
     )
 
 
 async def _update_recurring_themes(existing: str, session_notes: str) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo supervisor. Actualiza la lista de temas recurrentes del "
-            "paciente. Identifica patrones que se repiten. Escribe en español."
+            "Eres un psicólogo supervisor experto. Actualiza la lista de temas recurrentes del "
+            "paciente. Identifica patrones que se repiten, conexiones entre temas, "
+            "conflictos subyacentes, y esquemas cognitivos recurrentes. Escribe en español."
         ),
         user=f"""TEMAS RECURRENTES EXISTENTES:
 {existing or '(No hay registro previo)'}
@@ -255,8 +279,10 @@ Actualiza los temas recurrentes en Markdown.""",
 async def _update_progress(existing: str, session_notes: str) -> str:
     return await _llm_call(
         system=(
-            "Eres un psicólogo supervisor. Actualiza el registro de progreso del paciente. "
-            "Nota avances, retrocesos y estancamientos. Escribe en español."
+            "Eres un psicólogo supervisor experto. Actualiza el registro de progreso del paciente. "
+            "Nota avances concretos, retrocesos y sus posibles causas, estancamientos, "
+            "cambios en la alianza terapéutica, y nivel de adherencia al tratamiento. "
+            "Incluye indicadores medibles cuando sea posible. Escribe en español."
         ),
         user=f"""PROGRESO EXISTENTE:
 {existing or '(No hay registro previo)'}
@@ -269,6 +295,7 @@ Actualiza el progreso en Markdown.""",
 
 
 async def _update_agenda(manager: SessionManager, session_num: int):
+    """Uses fast model — simple scheduling task."""
     existing = manager.get_agenda()
     new_agenda = await _llm_call(
         system=(
@@ -282,5 +309,6 @@ async def _update_agenda(manager: SessionManager, session_num: int):
 
 La sesión {session_num} se completó hoy ({date.today().isoformat()}).
 Actualiza la agenda en Markdown.""",
+        model=FAST_MODEL,
     )
     manager.save_agenda(new_agenda)

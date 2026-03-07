@@ -44,11 +44,14 @@ export const CARTESIA_VOICES_ES = [
   { id: 'ad8eee76-d702-4a1f-a1bd-7596755ae4c9', name: 'Valeria - Promotora' },
 ] as const;
 
+export const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+
 export interface PersonalityConfig {
   name: string;
   voiceId: string;
   visualizer: VisualizerType;
   temperature: number; // 0.0 - 1.0
+  model: string; // OpenRouter model ID
 }
 
 export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
@@ -57,66 +60,77 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    model: DEFAULT_MODEL,
   },
   abogado: {
     name: 'Licenciado Martínez',
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    model: DEFAULT_MODEL,
   },
   psicologo: {
     name: 'Dra. Ana',
     voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
     visualizer: 'aura',
     temperature: 0.6,
+    model: DEFAULT_MODEL,
   },
   hippy: {
     name: 'Paz',
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'wave',
     temperature: 0.9,
+    model: DEFAULT_MODEL,
   },
   normal: {
     name: 'Alguien Normal',
     voiceId: '7b001dff-b8b2-4da7-92e4-5c794798effa',
     visualizer: 'bar',
     temperature: 0.7,
+    model: DEFAULT_MODEL,
   },
   estoico: {
     name: 'Marco el Estoico',
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'radial',
     temperature: 0.5,
+    model: DEFAULT_MODEL,
   },
   sacerdote: {
     name: 'Padre Miguel',
     voiceId: '5ef98b2a-68d2-4a35-ac52-632a2d288ea6',
     visualizer: 'aura',
     temperature: 0.6,
+    model: DEFAULT_MODEL,
   },
   monje: {
     name: 'Monje Thich',
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'aura',
     temperature: 0.7,
+    model: DEFAULT_MODEL,
   },
   imam: {
     name: 'Imán Ahmed',
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'radial',
     temperature: 0.6,
+    model: DEFAULT_MODEL,
   },
   rabino: {
     name: 'Rabino David',
     voiceId: '2695b6b5-5543-4be1-96d9-3967fb5e7fec',
     visualizer: 'radial',
     temperature: 0.7,
+    model: DEFAULT_MODEL,
   },
   pandit: {
     name: 'Pandit Arjun',
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'aura',
     temperature: 0.7,
+    model: DEFAULT_MODEL,
   },
 };
 

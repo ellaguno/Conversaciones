@@ -53,6 +53,7 @@ export async function POST(req: Request) {
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
     const voiceId = body?.voiceId || '';
     const temperature = typeof body?.temperature === 'number' ? body.temperature : null;
+    const model = typeof body?.model === 'string' ? body.model : '';
     const therapyMethod = typeof body?.therapyMethod === 'string' ? body.therapyMethod : '';
     const coupleTherapy = body?.coupleTherapy === true;
 
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
       personality,
       ...(voiceId && { voiceId }),
       ...(temperature !== null && { temperature }),
+      ...(model && { model }),
       ...(therapyMethod && { therapyMethod }),
       ...(coupleTherapy && { coupleTherapy }),
     });
