@@ -5,6 +5,7 @@ import {
   RoomServiceClient,
   type VideoGrant,
 } from 'livekit-server-sdk';
+import { rateLimit } from '@/lib/rate-limit';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -17,23 +18,27 @@ const API_KEY = process.env.LIVEKIT_API_KEY!;
 const API_SECRET = process.env.LIVEKIT_API_SECRET!;
 const LIVEKIT_URL = process.env.LIVEKIT_URL!;
 
+const VALID_PERSONALITIES = new Set(['trader', 'abogado', 'psicologo', 'hippy']);
+
 export const revalidate = 0;
 
 export async function POST(req: Request) {
-  if (process.env.NODE_ENV !== 'development') {
-    throw new Error(
-      'THIS API ROUTE IS INSECURE. DO NOT USE THIS ROUTE IN PRODUCTION WITHOUT AN AUTHENTICATION LAYER.'
-    );
-  }
-
   try {
+    // Rate limit: 5 requests per minute per IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`token:${ip}`, 5, 60_000)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
       throw new Error('LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET must be defined');
     }
 
     const body = await req.json().catch(() => ({}));
-    const personality = body?.personality || 'trader';
-    const patientId = body?.patientId || '';
+    const rawPersonality = body?.personality || 'trader';
+    const personality = VALID_PERSONALITIES.has(rawPersonality) ? rawPersonality : 'trader';
+    const rawPatientId = body?.patientId || '';
+    const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
@@ -49,6 +54,7 @@ export async function POST(req: Request) {
       name: roomName,
       metadata: personality,
       emptyTimeout: 60,
+      maxParticipants: 2,
     });
 
     const participantToken = await createParticipantToken(

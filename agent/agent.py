@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 import logging
@@ -26,6 +27,7 @@ METRICS_FILE = Path(__file__).parent / "metrics.json"
 # Cost per 1M tokens (Gemini 2.0 Flash via OpenRouter)
 LLM_COST_PER_1M_INPUT = 0.10
 LLM_COST_PER_1M_OUTPUT = 0.40
+MAX_TRANSCRIPT_TURNS = 500
 
 
 def _load_metrics() -> dict:
@@ -65,11 +67,15 @@ async def entrypoint(ctx: JobContext):
 
     if room_name.startswith("room_"):
         parts = room_name.split("_")
-        if len(parts) >= 3 and parts[1] in PERSONALITIES:
-            personality_key = parts[1]
+        if len(parts) >= 3:
+            if parts[1] in PERSONALITIES:
+                personality_key = parts[1]
+            else:
+                logger.warning(f"Personalidad desconocida solicitada: {parts[1]}")
         if len(parts) >= 4 and parts[1] == "psicologo":
             # room_psicologo_{patient_id}_{random}
-            patient_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
+            raw_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
+            patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
             logger.info(f"Patient ID: '{patient_id}'")
 
     personality = PERSONALITIES[personality_key]
@@ -144,8 +150,11 @@ async def entrypoint(ctx: JobContext):
             if hasattr(item, "role") and hasattr(item, "text_content"):
                 text = item.text_content
                 if text:
+                    if len(transcript) >= MAX_TRANSCRIPT_TURNS:
+                        logger.warning("Transcripción alcanzó límite máximo, ignorando turnos adicionales")
+                        return
                     transcript.append({"role": item.role, "text": text})
-                    logger.info(f"Transcripción [{item.role}]: {text[:80]}...")
+                    logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
 
         @session.on("close")
         def on_close(event):

@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 from datetime import datetime, date
 from pathlib import Path
@@ -10,8 +11,14 @@ class SessionManager:
     """Manages patient session files and directories."""
 
     def __init__(self, patient_id: str = "paciente_eduardo"):
-        self.patient_id = patient_id
-        self.patient_dir = SESSIONS_DIR / patient_id
+        safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', patient_id)
+        if not safe_id:
+            safe_id = "default"
+        self.patient_id = safe_id
+        self.patient_dir = SESSIONS_DIR / safe_id
+        # Verify the resolved path stays within SESSIONS_DIR
+        if not self.patient_dir.resolve().is_relative_to(SESSIONS_DIR.resolve()):
+            raise ValueError(f"Invalid patient ID: {patient_id}")
         self.sesiones_dir = self.patient_dir / "sesiones"
         self.conclusiones_dir = self.patient_dir / "conclusiones"
         self._ensure_dirs()

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { rateLimit } from '@/lib/rate-limit';
 
 const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');
 
@@ -93,8 +94,13 @@ function readPatient(patientDir: string, patientId: string): PatientData {
   return result;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`sessions:${ip}`, 60, 60_000)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
     if (!existsSync(SESSIONS_BASE)) {
       return NextResponse.json({ patients: [] });
     }
