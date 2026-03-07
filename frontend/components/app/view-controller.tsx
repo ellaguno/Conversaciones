@@ -52,14 +52,7 @@ export function ViewController({
   const wasConnected = useRef(false);
   const [showNotes, setShowNotes] = useState(false);
 
-  // Auto-connect when remounted after personality change
-  useEffect(() => {
-    if (autoConnect && !isConnected) {
-      start();
-    }
-  }, [autoConnect, isConnected, start]);
-
-  // Detect disconnection to reset autoConnect
+  // Detect disconnection to reset autoConnect (must run before auto-connect effect)
   useEffect(() => {
     if (isConnected) {
       wasConnected.current = true;
@@ -68,6 +61,14 @@ export function ViewController({
       onDisconnected?.();
     }
   }, [isConnected, onDisconnected]);
+
+  // Auto-connect when remounted after personality change
+  // Skip if wasConnected was true — that means user intentionally disconnected
+  useEffect(() => {
+    if (autoConnect && !isConnected && !wasConnected.current) {
+      start();
+    }
+  }, [autoConnect, isConnected, start]);
 
   // Notes view (outside of AnimatePresence/session)
   if (showNotes && !isConnected) {
