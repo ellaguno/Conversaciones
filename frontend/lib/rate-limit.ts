@@ -4,11 +4,7 @@ const tokenBuckets = new Map<string, { tokens: number; lastRefill: number }>();
  * Simple in-memory token bucket rate limiter.
  * Returns true if the request is allowed, false if rate limited.
  */
-export function rateLimit(
-  key: string,
-  maxTokens: number,
-  refillIntervalMs: number,
-): boolean {
+export function rateLimit(key: string, maxTokens: number, refillIntervalMs: number): boolean {
   const now = Date.now();
   let bucket = tokenBuckets.get(key);
 
@@ -35,12 +31,15 @@ export function rateLimit(
 }
 
 /** Clean up stale buckets periodically (every 5 minutes) */
-setInterval(() => {
-  const now = Date.now();
-  const staleThreshold = 10 * 60 * 1000; // 10 minutes
-  for (const [key, bucket] of tokenBuckets) {
-    if (now - bucket.lastRefill > staleThreshold) {
-      tokenBuckets.delete(key);
+setInterval(
+  () => {
+    const now = Date.now();
+    const staleThreshold = 10 * 60 * 1000; // 10 minutes
+    for (const [key, bucket] of tokenBuckets) {
+      if (now - bucket.lastRefill > staleThreshold) {
+        tokenBuckets.delete(key);
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  },
+  5 * 60 * 1000
+);

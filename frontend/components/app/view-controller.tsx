@@ -6,9 +6,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
 import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
+import { ConversationLogView } from '@/components/app/conversation-log-view';
 import { NotesView } from '@/components/app/notes-view';
 import { WelcomeView } from '@/components/app/welcome-view';
 import type { PersonalityConfig } from '@/lib/personalities-config';
+import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
 
 const MotionWelcomeView = motion.create(WelcomeView);
 const MotionSessionView = motion.create(AgentSessionView_01);
@@ -34,6 +36,7 @@ interface ViewControllerProps {
   onDisconnected?: () => void;
   personalityConfig: PersonalityConfig;
   onOpenSettings: () => void;
+  onLogout: () => void;
 }
 
 export function ViewController({
@@ -46,11 +49,13 @@ export function ViewController({
   onDisconnected,
   personalityConfig,
   onOpenSettings,
+  onLogout,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
   const wasConnected = useRef(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showConversations, setShowConversations] = useState<string | null>(null);
 
   // Detect disconnection to reset autoConnect (must run before auto-connect effect)
   useEffect(() => {
@@ -70,7 +75,7 @@ export function ViewController({
     }
   }, [autoConnect, isConnected, start]);
 
-  // Notes view (outside of AnimatePresence/session)
+  // Notes view (Dra. Ana)
   if (showNotes && !isConnected) {
     return (
       <NotesView
@@ -78,6 +83,23 @@ export function ViewController({
         onStartSession={(patientId?: string) => {
           setShowNotes(false);
           onStartCall('psicologo', patientId);
+        }}
+      />
+    );
+  }
+
+  // Conversation log view (all other personalities)
+  if (showConversations && !isConnected) {
+    const config = DEFAULT_CONFIGS[showConversations];
+    return (
+      <ConversationLogView
+        personality={showConversations}
+        personalityName={config?.name || showConversations}
+        onBack={() => setShowConversations(null)}
+        onStartCall={() => {
+          const p = showConversations;
+          setShowConversations(null);
+          onStartCall(p);
         }}
       />
     );
@@ -94,7 +116,9 @@ export function ViewController({
           onSelectPersonality={onSelectPersonality}
           onStartCall={onStartCall}
           onViewNotes={() => setShowNotes(true)}
+          onViewConversations={(p: string) => setShowConversations(p)}
           onOpenSettings={onOpenSettings}
+          onLogout={onLogout}
         />
       )}
       {isConnected && (

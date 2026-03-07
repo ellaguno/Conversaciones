@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 function getAuthPassword(): string {
   const configFile = join(process.cwd(), '..', 'auth-config.json');

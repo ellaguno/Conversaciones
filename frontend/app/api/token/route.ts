@@ -19,8 +19,17 @@ const API_SECRET = process.env.LIVEKIT_API_SECRET!;
 const LIVEKIT_URL = process.env.LIVEKIT_URL!;
 
 const VALID_PERSONALITIES = new Set([
-  'trader', 'abogado', 'psicologo', 'hippy', 'normal',
-  'estoico', 'sacerdote', 'monje', 'imam', 'rabino', 'pandit',
+  'trader',
+  'abogado',
+  'psicologo',
+  'hippy',
+  'normal',
+  'estoico',
+  'sacerdote',
+  'monje',
+  'imam',
+  'rabino',
+  'pandit',
 ]);
 
 export const revalidate = 0;

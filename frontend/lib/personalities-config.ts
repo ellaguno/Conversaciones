@@ -140,6 +140,9 @@ export function saveConfigs(configs: Record<string, PersonalityConfig>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
 }
 
-export function getConfig(configs: Record<string, PersonalityConfig>, key: string): PersonalityConfig {
+export function getConfig(
+  configs: Record<string, PersonalityConfig>,
+  key: string
+): PersonalityConfig {
   return configs[key] || DEFAULT_CONFIGS[key] || DEFAULT_CONFIGS.trader;
 }

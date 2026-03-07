@@ -70,7 +70,9 @@ interface WelcomeViewProps {
   onSelectPersonality: (personality: string) => void;
   onStartCall: (personality: string, patientId?: string) => void;
   onViewNotes?: () => void;
+  onViewConversations?: (personality: string) => void;
   onOpenSettings?: () => void;
+  onLogout?: () => void;
 }
 
 export const WelcomeView = ({
@@ -79,7 +81,9 @@ export const WelcomeView = ({
   onSelectPersonality,
   onStartCall,
   onViewNotes,
+  onViewConversations,
   onOpenSettings,
+  onLogout,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -88,11 +92,22 @@ export const WelcomeView = ({
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
   const [selectedGuide, setSelectedGuide] = useState('estoico');
+  const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch('/api/metrics')
       .then((r) => r.json())
       .then(setMetrics)
+      .catch(() => {});
+    fetch('/api/conversations')
+      .then((r) => r.json())
+      .then((data) => {
+        const counts: Record<string, number> = {};
+        for (const p of data.personalities || []) {
+          counts[p.personality] = p.conversations.length;
+        }
+        setConversationCounts(counts);
+      })
       .catch(() => {});
   }, []);
 
@@ -314,27 +329,54 @@ export const WelcomeView = ({
               )}
             </>
           ) : (
-            <Button
-              size="lg"
-              onClick={() =>
-                onStartCall(isEspiritual ? selectedGuide : selectedPersonality)
-              }
-              className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
-            >
-              {startButtonText}
-            </Button>
+            <>
+              <Button
+                size="lg"
+                onClick={() => onStartCall(isEspiritual ? selectedGuide : selectedPersonality)}
+                className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
+              >
+                {startButtonText}
+              </Button>
+              {(() => {
+                const effectiveKey = isEspiritual ? selectedGuide : selectedPersonality;
+                const count = conversationCounts[effectiveKey] || 0;
+                if (count > 0 && onViewConversations) {
+                  return (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => onViewConversations(effectiveKey)}
+                      className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
+                    >
+                      Ver conversaciones ({count})
+                    </Button>
+                  );
+                }
+                return null;
+              })()}
+            </>
           )}
         </div>
 
-        {/* Settings link */}
-        {onOpenSettings && (
-          <button
-            onClick={onOpenSettings}
-            className="text-muted-foreground hover:text-foreground mt-4 text-xs underline transition-colors"
-          >
-            Configuracion
-          </button>
-        )}
+        {/* Settings & logout links */}
+        <div className="mt-4 flex items-center gap-4">
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+            >
+              Configuracion
+            </button>
+          )}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="text-muted-foreground text-xs underline transition-colors hover:text-red-500"
+            >
+              Salir
+            </button>
+          )}
+        </div>
       </section>
     </div>
   );

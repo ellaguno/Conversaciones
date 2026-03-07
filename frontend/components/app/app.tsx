@@ -1,22 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { signOut } from 'next-auth/react';
 import { TokenSource } from 'livekit-client';
 import { useSession } from '@livekit/components-react';
 import { WarningIcon } from '@phosphor-icons/react/dist/ssr';
 import type { AppConfig } from '@/app-config';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
 import { StartAudioButton } from '@/components/agents-ui/start-audio-button';
-import { ViewController } from '@/components/app/view-controller';
 import { SettingsView } from '@/components/app/settings-view';
+import { ViewController } from '@/components/app/view-controller';
 import { Toaster } from '@/components/ui/sonner';
 import { useAgentErrors } from '@/hooks/useAgentErrors';
 import { useDebugMode } from '@/hooks/useDebug';
 import {
   type PersonalityConfig,
+  getConfig,
   loadConfigs,
   saveConfigs,
-  getConfig,
 } from '@/lib/personalities-config';
 
 const IN_DEVELOPMENT = process.env.NODE_ENV !== 'production';
@@ -42,6 +43,7 @@ function SessionInner({
   onDisconnected,
   personalityConfig,
   onOpenSettings,
+  onLogout,
 }: {
   appConfig: AppConfig;
   personality: string;
@@ -53,6 +55,7 @@ function SessionInner({
   onDisconnected: () => void;
   personalityConfig: PersonalityConfig;
   onOpenSettings: () => void;
+  onLogout: () => void;
 }) {
   const tokenSource = useMemo(() => {
     return TokenSource.custom(async () => {
@@ -92,6 +95,7 @@ function SessionInner({
           onDisconnected={onDisconnected}
           personalityConfig={personalityConfig}
           onOpenSettings={onOpenSettings}
+          onLogout={onLogout}
         />
       </main>
       <StartAudioButton label="Start Audio" />
@@ -141,6 +145,10 @@ export function App({ appConfig }: AppProps) {
     saveConfigs(newConfigs);
   }, []);
 
+  const handleLogout = useCallback(() => {
+    signOut({ callbackUrl: '/login' });
+  }, []);
+
   if (showSettings) {
     return (
       <SettingsView
@@ -166,6 +174,7 @@ export function App({ appConfig }: AppProps) {
       onDisconnected={handleDisconnected}
       personalityConfig={activeConfig}
       onOpenSettings={() => setShowSettings(true)}
+      onLogout={handleLogout}
     />
   );
 }

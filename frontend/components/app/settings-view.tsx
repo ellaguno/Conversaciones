@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   CARTESIA_VOICES_ES,
-  VISUALIZER_TYPES,
   DEFAULT_CONFIGS,
   type PersonalityConfig,
+  VISUALIZER_TYPES,
 } from '@/lib/personalities-config';
 
 const ALL_PERSONALITIES = [
@@ -43,7 +43,12 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
   const update = (field: keyof PersonalityConfig, value: string | number) => {
     setDraft((prev) => ({
       ...prev,
-      [selected]: { ...prev[selected], ...DEFAULT_CONFIGS[selected], ...prev[selected], [field]: value },
+      [selected]: {
+        ...prev[selected],
+        ...DEFAULT_CONFIGS[selected],
+        ...prev[selected],
+        [field]: value,
+      },
     }));
   };
 
@@ -89,10 +94,10 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
   };
 
   return (
-    <div className="flex min-h-svh flex-col items-center bg-background px-4 py-8">
+    <div className="bg-background flex min-h-svh flex-col items-center px-4 py-8">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">Configuracion</h1>
+          <h1 className="text-foreground text-xl font-bold">Configuracion</h1>
           <Button variant="outline" size="sm" onClick={onBack} className="rounded-full text-xs">
             Volver
           </Button>
@@ -117,29 +122,29 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
         </div>
 
         {/* Settings form */}
-        <div className="space-y-5 rounded-xl border border-border bg-card p-5">
+        <div className="border-border bg-card space-y-5 rounded-xl border p-5">
           {/* Name */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground uppercase">
+            <label className="text-muted-foreground mb-1 block text-xs font-semibold uppercase">
               Nombre del personaje
             </label>
             <input
               type="text"
               value={current.name}
               onChange={(e) => update('name', e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+              className="border-border bg-background text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             />
           </div>
 
           {/* Voice */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground uppercase">
+            <label className="text-muted-foreground mb-1 block text-xs font-semibold uppercase">
               Voz
             </label>
             <select
               value={current.voiceId}
               onChange={(e) => update('voiceId', e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+              className="border-border bg-background text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             >
               {CARTESIA_VOICES_ES.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -151,7 +156,7 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
 
           {/* Visualizer */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground uppercase">
+            <label className="text-muted-foreground mb-1 block text-xs font-semibold uppercase">
               Vista de voz
             </label>
             <div className="flex gap-2">
@@ -173,9 +178,11 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
 
           {/* Temperature */}
           <div>
-            <label className="mb-1 flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase">
+            <label className="text-muted-foreground mb-1 flex items-center justify-between text-xs font-semibold uppercase">
               <span>Creatividad / Temperatura</span>
-              <span className="text-foreground font-mono normal-case">{current.temperature.toFixed(1)}</span>
+              <span className="text-foreground font-mono normal-case">
+                {current.temperature.toFixed(1)}
+              </span>
             </label>
             <div className="flex items-center gap-3">
               <span className="text-muted-foreground text-[10px]">Preciso</span>
@@ -186,7 +193,7 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
                 step="0.1"
                 value={current.temperature}
                 onChange={(e) => update('temperature', parseFloat(e.target.value))}
-                className="flex-1 accent-primary"
+                className="accent-primary flex-1"
               />
               <span className="text-muted-foreground text-[10px]">Creativo</span>
             </div>
@@ -195,35 +202,34 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
 
         {/* Actions */}
         <div className="mt-6 flex gap-3">
-          <Button onClick={handleSave} className="flex-1 rounded-full font-mono text-xs font-bold uppercase">
+          <Button
+            onClick={handleSave}
+            className="flex-1 rounded-full font-mono text-xs font-bold uppercase"
+          >
             Guardar
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            className="rounded-full text-xs"
-          >
+          <Button variant="outline" onClick={handleReset} className="rounded-full text-xs">
             Restaurar defaults
           </Button>
         </div>
 
         {/* Password change */}
-        <div className="mt-8 rounded-xl border border-border bg-card p-5">
-          <h2 className="mb-4 text-sm font-bold text-foreground">Cambiar contraseña</h2>
+        <div className="border-border bg-card mt-8 rounded-xl border p-5">
+          <h2 className="text-foreground mb-4 text-sm font-bold">Cambiar contraseña</h2>
           <div className="space-y-3">
             <input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="Contraseña actual"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             />
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Nueva contraseña"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             />
             <input
               type="password"
@@ -231,10 +237,12 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirmar nueva contraseña"
               onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             />
             {passwordMsg && (
-              <p className={`text-xs ${passwordMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
+              <p
+                className={`text-xs ${passwordMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}
+              >
                 {passwordMsg.text}
               </p>
             )}

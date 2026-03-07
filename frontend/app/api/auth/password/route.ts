@@ -34,7 +34,10 @@ export async function PUT(req: Request) {
     }
 
     if (newPassword.length < 4) {
-      return NextResponse.json({ error: 'La contraseña debe tener al menos 4 caracteres' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'La contraseña debe tener al menos 4 caracteres' },
+        { status: 400 }
+      );
     }
 
     // Verify current password
