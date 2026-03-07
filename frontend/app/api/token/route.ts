@@ -53,6 +53,8 @@ export async function POST(req: Request) {
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
     const voiceId = body?.voiceId || '';
     const temperature = typeof body?.temperature === 'number' ? body.temperature : null;
+    const therapyMethod = typeof body?.therapyMethod === 'string' ? body.therapyMethod : '';
+    const coupleTherapy = body?.coupleTherapy === true;
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
@@ -69,6 +71,8 @@ export async function POST(req: Request) {
       personality,
       ...(voiceId && { voiceId }),
       ...(temperature !== null && { temperature }),
+      ...(therapyMethod && { therapyMethod }),
+      ...(coupleTherapy && { coupleTherapy }),
     });
 
     await roomService.createRoom({

@@ -10,6 +10,7 @@ import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provi
 import { StartAudioButton } from '@/components/agents-ui/start-audio-button';
 import { SettingsView } from '@/components/app/settings-view';
 import { ViewController } from '@/components/app/view-controller';
+import type { TherapyOptions } from '@/components/app/welcome-view';
 import { Toaster } from '@/components/ui/sonner';
 import { useAgentErrors } from '@/hooks/useAgentErrors';
 import { useDebugMode } from '@/hooks/useDebug';
@@ -44,6 +45,8 @@ function SessionInner({
   personalityConfig,
   onOpenSettings,
   onLogout,
+  therapyMethod,
+  coupleTherapy,
 }: {
   appConfig: AppConfig;
   personality: string;
@@ -51,11 +54,13 @@ function SessionInner({
   autoConnect: boolean;
   selectedPersonality: string;
   onSelectPersonality: (p: string) => void;
-  onStartCall: (p: string, patientId?: string) => void;
+  onStartCall: (p: string, patientId?: string, therapy?: TherapyOptions) => void;
   onDisconnected: () => void;
   personalityConfig: PersonalityConfig;
   onOpenSettings: () => void;
   onLogout: () => void;
+  therapyMethod: string;
+  coupleTherapy: boolean;
 }) {
   const tokenSource = useMemo(() => {
     return TokenSource.custom(async () => {
@@ -67,6 +72,8 @@ function SessionInner({
           patientId,
           voiceId: personalityConfig.voiceId,
           temperature: personalityConfig.temperature,
+          ...(therapyMethod && { therapyMethod }),
+          ...(coupleTherapy && { coupleTherapy }),
         }),
       });
       if (!res.ok) {
@@ -74,7 +81,14 @@ function SessionInner({
       }
       return await res.json();
     });
-  }, [personality, patientId, personalityConfig.voiceId, personalityConfig.temperature]);
+  }, [
+    personality,
+    patientId,
+    personalityConfig.voiceId,
+    personalityConfig.temperature,
+    therapyMethod,
+    coupleTherapy,
+  ]);
 
   const session = useSession(
     tokenSource,
@@ -123,18 +137,25 @@ export function App({ appConfig }: AppProps) {
   const [autoConnect, setAutoConnect] = useState(false);
   const [configs, setConfigs] = useState<Record<string, PersonalityConfig>>({});
   const [showSettings, setShowSettings] = useState(false);
+  const [activeTherapyMethod, setActiveTherapyMethod] = useState('');
+  const [activeCoupleTherapy, setActiveCoupleTherapy] = useState(false);
 
   useEffect(() => {
     setConfigs(loadConfigs());
   }, []);
 
-  const handleStartCall = useCallback((personality: string, patientId?: string) => {
-    setSelectedPersonality(personality);
-    setActivePersonality(personality);
-    setActivePatientId(patientId || '');
-    setAutoConnect(true);
-    setSessionId((prev) => prev + 1);
-  }, []);
+  const handleStartCall = useCallback(
+    (personality: string, patientId?: string, therapy?: TherapyOptions) => {
+      setSelectedPersonality(personality);
+      setActivePersonality(personality);
+      setActivePatientId(patientId || '');
+      setActiveTherapyMethod(therapy?.therapyMethod || '');
+      setActiveCoupleTherapy(therapy?.coupleTherapy || false);
+      setAutoConnect(true);
+      setSessionId((prev) => prev + 1);
+    },
+    []
+  );
 
   const handleDisconnected = useCallback(() => {
     setAutoConnect(false);
@@ -175,6 +196,8 @@ export function App({ appConfig }: AppProps) {
       personalityConfig={activeConfig}
       onOpenSettings={() => setShowSettings(true)}
       onLogout={handleLogout}
+      therapyMethod={activeTherapyMethod}
+      coupleTherapy={activeCoupleTherapy}
     />
   );
 }

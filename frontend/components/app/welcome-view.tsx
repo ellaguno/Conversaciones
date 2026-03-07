@@ -51,6 +51,14 @@ const SPIRITUAL_GUIDES = [
   { key: 'pandit', name: 'Pandit Hindú' },
 ];
 
+const THERAPY_METHODS = [
+  { key: 'cbt', name: 'CBT - Cognitivo-Conductual', short: 'CBT' },
+  { key: 'act', name: 'ACT - Aceptacion y Compromiso', short: 'ACT' },
+  { key: 'dbt', name: 'DBT - Dialectico-Conductual', short: 'DBT' },
+  { key: 'mindfulness', name: 'Mindfulness - Atencion Plena', short: 'Mindfulness' },
+  { key: 'gestalt', name: 'Gestalt / Sistemica', short: 'Gestalt' },
+];
+
 interface Metrics {
   total_tokens: number;
   total_cost_usd: number;
@@ -64,11 +72,16 @@ interface PatientInfo {
   sessionsCount: number;
 }
 
+export interface TherapyOptions {
+  therapyMethod?: string;
+  coupleTherapy?: boolean;
+}
+
 interface WelcomeViewProps {
   startButtonText: string;
   selectedPersonality: string;
   onSelectPersonality: (personality: string) => void;
-  onStartCall: (personality: string, patientId?: string) => void;
+  onStartCall: (personality: string, patientId?: string, therapy?: TherapyOptions) => void;
   onViewNotes?: () => void;
   onViewConversations?: (personality: string) => void;
   onOpenSettings?: () => void;
@@ -93,6 +106,8 @@ export const WelcomeView = ({
   const [newPatientName, setNewPatientName] = useState('');
   const [selectedGuide, setSelectedGuide] = useState('estoico');
   const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
+  const [therapyMethod, setTherapyMethod] = useState('cbt');
+  const [coupleTherapy, setCoupleTherapy] = useState(false);
 
   useEffect(() => {
     fetch('/api/metrics')
@@ -237,18 +252,6 @@ export const WelcomeView = ({
                   value={newPatientName}
                   onChange={(e) => setNewPatientName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newPatientName.trim()) {
-                      const patientId = newPatientName
-                        .trim()
-                        .toLowerCase()
-                        .replace(/\s+/g, '_')
-                        .replace(/[^a-z0-9_-]/g, '');
-                      if (patientId) {
-                        setCreatingPatient(false);
-                        setNewPatientName('');
-                        onStartCall('psicologo', patientId);
-                      }
-                    }
                     if (e.key === 'Escape') {
                       setCreatingPatient(false);
                       setNewPatientName('');
@@ -258,6 +261,34 @@ export const WelcomeView = ({
                   autoFocus
                   className="border-border bg-background text-foreground placeholder:text-muted-foreground mb-2 w-full rounded-lg border px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
                 />
+
+                {/* Therapy method selector */}
+                <label className="text-muted-foreground mt-2 mb-1 block text-left text-[11px] font-semibold uppercase">
+                  Enfoque terapeutico
+                </label>
+                <select
+                  value={therapyMethod}
+                  onChange={(e) => setTherapyMethod(e.target.value)}
+                  className="border-border bg-background text-foreground mb-2 w-full rounded-lg border px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+                >
+                  {THERAPY_METHODS.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Couple therapy toggle */}
+                <label className="mb-3 flex cursor-pointer items-center gap-2 text-left">
+                  <input
+                    type="checkbox"
+                    checked={coupleTherapy}
+                    onChange={(e) => setCoupleTherapy(e.target.checked)}
+                    className="h-4 w-4 rounded border-purple-400 accent-purple-600"
+                  />
+                  <span className="text-foreground text-xs font-medium">Terapia de pareja</span>
+                </label>
+
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -269,7 +300,10 @@ export const WelcomeView = ({
                       if (patientId) {
                         setCreatingPatient(false);
                         setNewPatientName('');
-                        onStartCall('psicologo', patientId);
+                        onStartCall('psicologo', patientId, {
+                          therapyMethod,
+                          coupleTherapy,
+                        });
                       }
                     }}
                     disabled={!newPatientName.trim()}

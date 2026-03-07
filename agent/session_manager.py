@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import glob
 from datetime import datetime, date
 from pathlib import Path
@@ -37,6 +38,25 @@ class SessionManager:
     def get_session_filepath(self, session_num: int) -> Path:
         today = date.today().isoformat()
         return self.sesiones_dir / f"{today}_sesion_{session_num:03d}.md"
+
+    # --- Therapy config ---
+
+    def save_therapy_config(self, method: str, couple: bool):
+        """Save therapy method and modality for this patient."""
+        config = {"method": method, "couple": couple}
+        (self.patient_dir / "therapy_config.json").write_text(
+            json.dumps(config, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def get_therapy_config(self) -> dict:
+        """Read stored therapy config. Returns defaults if not found."""
+        config_path = self.patient_dir / "therapy_config.json"
+        if config_path.exists():
+            try:
+                return json.loads(config_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {"method": "cbt", "couple": False}
 
     # --- Read files ---
 

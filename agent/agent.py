@@ -12,6 +12,7 @@ from livekit.plugins import deepgram, openai, cartesia
 from personalities import (
     PERSONALITIES, DEFAULT_PERSONALITY,
     DRA_ANA_INTAKE_PROMPT, DRA_ANA_FOLLOWUP_PROMPT,
+    THERAPY_METHODS, DEFAULT_THERAPY_METHOD, DRA_ANA_COUPLE_ADDON,
 )
 from session_manager import SessionManager
 from conversation_log import ConversationLog
@@ -81,12 +82,16 @@ async def entrypoint(ctx: JobContext):
             patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
             logger.info(f"Patient ID: '{patient_id}'")
 
-    # Parse room metadata for custom voice/temperature
+    # Parse room metadata for custom voice/temperature/therapy config
     room_metadata = room.metadata or ""
+    therapy_method = None
+    couple_therapy = False
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
         custom_temperature = meta.get("temperature")
+        therapy_method = meta.get("therapyMethod")
+        couple_therapy = bool(meta.get("coupleTherapy", False))
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -104,13 +109,29 @@ async def entrypoint(ctx: JobContext):
         tools = create_therapy_tools(manager)
 
         if manager.is_first_session():
+            # First session: use therapy method from metadata (selected by user)
+            method_key = therapy_method if therapy_method in THERAPY_METHODS else DEFAULT_THERAPY_METHOD
+            method_info = THERAPY_METHODS[method_key]
+            instructions += f"\n\n--- ENFOQUE TERAPÉUTICO ---\n{method_info['description']}"
+            if couple_therapy:
+                instructions += DRA_ANA_COUPLE_ADDON
             instructions += "\n\n" + DRA_ANA_INTAKE_PROMPT
-            logger.info("Primera sesión (intake)")
+            # Store therapy config so agent knows to save it in profile
+            manager.save_therapy_config(method_key, couple_therapy)
+            logger.info(f"Primera sesión (intake) - Método: {method_info['name']}, Pareja: {couple_therapy}")
         else:
+            # Follow-up: read therapy method from stored config
+            stored_config = manager.get_therapy_config()
+            method_key = stored_config.get("method", DEFAULT_THERAPY_METHOD)
+            is_couple = stored_config.get("couple", False)
+            if method_key in THERAPY_METHODS:
+                instructions += f"\n\n--- ENFOQUE TERAPÉUTICO ---\n{THERAPY_METHODS[method_key]['description']}"
+            if is_couple:
+                instructions += DRA_ANA_COUPLE_ADDON
             context = manager.build_session_context()
             instructions += "\n\n" + DRA_ANA_FOLLOWUP_PROMPT
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
-            logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()}")
+            logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()} - Método: {method_key}")
 
     # Conversation log for all personalities
     conv_log = ConversationLog(personality_key, personality["name"])

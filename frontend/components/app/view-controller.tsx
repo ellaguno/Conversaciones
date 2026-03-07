@@ -8,7 +8,7 @@ import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
 import { ConversationLogView } from '@/components/app/conversation-log-view';
 import { NotesView } from '@/components/app/notes-view';
-import { WelcomeView } from '@/components/app/welcome-view';
+import { type TherapyOptions, WelcomeView } from '@/components/app/welcome-view';
 import type { PersonalityConfig } from '@/lib/personalities-config';
 import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
 
@@ -31,7 +31,7 @@ interface ViewControllerProps {
   selectedPersonality: string;
   activePersonality: string;
   onSelectPersonality: (personality: string) => void;
-  onStartCall: (personality: string, patientId?: string) => void;
+  onStartCall: (personality: string, patientId?: string, therapy?: TherapyOptions) => void;
   autoConnect?: boolean;
   onDisconnected?: () => void;
   personalityConfig: PersonalityConfig;
