@@ -14,6 +14,7 @@ from personalities import (
     DRA_ANA_INTAKE_PROMPT, DRA_ANA_FOLLOWUP_PROMPT,
 )
 from session_manager import SessionManager
+from conversation_log import ConversationLog
 from therapy_tools import create_therapy_tools
 from note_generator import generate_session_notes, generate_intake_notes
 
@@ -84,9 +85,10 @@ async def entrypoint(ctx: JobContext):
     # Build instructions and tools
     tools = []
     instructions = personality["system_prompt"]
+    manager = None
 
-    if personality.get("has_sessions"):
-        # Dra. Ana with session management
+    if personality.get("has_therapy_tools"):
+        # Dra. Ana with full session management + therapy tools
         manager = SessionManager(patient_id=patient_id or "default")
         tools = create_therapy_tools(manager)
 
@@ -98,6 +100,9 @@ async def entrypoint(ctx: JobContext):
             instructions += "\n\n" + DRA_ANA_FOLLOWUP_PROMPT
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
             logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()}")
+
+    # Conversation log for all personalities
+    conv_log = ConversationLog(personality_key, personality["name"])
 
     session = AgentSession(
         stt=deepgram.STT(
@@ -139,39 +144,45 @@ async def entrypoint(ctx: JobContext):
         except Exception as e:
             logger.debug(f"Error guardando métricas: {e}")
 
-    # Transcript capture for Dra. Ana
+    # Transcript capture for all personalities
     transcript = []
     start_time = datetime.now()
 
-    if personality.get("has_sessions"):
-        @session.on("conversation_item_added")
-        def on_conversation_item(event):
-            item = event.item
-            if hasattr(item, "role") and hasattr(item, "text_content"):
-                text = item.text_content
-                if text:
-                    if len(transcript) >= MAX_TRANSCRIPT_TURNS:
-                        logger.warning("Transcripción alcanzó límite máximo, ignorando turnos adicionales")
-                        return
-                    transcript.append({"role": item.role, "text": text})
-                    logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
+    @session.on("conversation_item_added")
+    def on_conversation_item(event):
+        item = event.item
+        if hasattr(item, "role") and hasattr(item, "text_content"):
+            text = item.text_content
+            if text:
+                if len(transcript) >= MAX_TRANSCRIPT_TURNS:
+                    logger.warning("Transcripción alcanzó límite máximo, ignorando turnos adicionales")
+                    return
+                transcript.append({"role": item.role, "text": text})
+                logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
 
-        @session.on("close")
-        def on_close(event):
-            # Fallback: extract from chat context if event-based capture missed messages
-            if len(transcript) < 2:
-                logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
-                for msg in session.chat_ctx.items:
-                    if hasattr(msg, "role") and msg.role in ("user", "assistant"):
-                        text = msg.text_content if hasattr(msg, "text_content") else None
-                        if text:
-                            transcript.append({"role": msg.role, "text": text})
+    @session.on("close")
+    def on_close(event):
+        # Fallback: extract from chat context if event-based capture missed messages
+        if len(transcript) < 2:
+            logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
+            for msg in session.chat_ctx.items:
+                if hasattr(msg, "role") and msg.role in ("user", "assistant"):
+                    text = msg.text_content if hasattr(msg, "text_content") else None
+                    if text:
+                        transcript.append({"role": msg.role, "text": text})
 
-            if len(transcript) < 2:
-                logger.info("Sesión muy corta, no se generan notas")
-                return
+        if len(transcript) < 2:
+            logger.info("Sesión muy corta, no se guardan notas")
+            return
 
-            logger.info(f"Sesión terminada. {len(transcript)} turnos capturados. Generando notas...")
+        logger.info(f"Sesión terminada. {len(transcript)} turnos capturados.")
+
+        # Save conversation log for all personalities
+        conv_log.save(transcript, start_time)
+        logger.info(f"Conversación guardada: {conv_log.get_log_dir()}")
+
+        # Generate therapy notes only for Dra. Ana
+        if manager is not None:
             asyncio.ensure_future(_generate_notes(manager, transcript, start_time))
 
     agent = ComercianteAgent(personality_key, instructions, tools)

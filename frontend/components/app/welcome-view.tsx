@@ -28,6 +28,27 @@ const PERSONALITIES = [
     description: 'Sabio alternativo',
     emoji: '☮️',
   },
+  {
+    key: 'normal',
+    name: 'Alguien Normal',
+    description: 'Una persona normal para platicar',
+    emoji: '👤',
+  },
+  {
+    key: 'espiritual',
+    name: 'Guía Espiritual',
+    description: 'Elige una tradición',
+    emoji: '🕊️',
+  },
+];
+
+const SPIRITUAL_GUIDES = [
+  { key: 'estoico', name: 'Filósofo Estoico' },
+  { key: 'sacerdote', name: 'Sacerdote Católico' },
+  { key: 'monje', name: 'Monje Budista' },
+  { key: 'imam', name: 'Imán Musulmán' },
+  { key: 'rabino', name: 'Rabino Judío' },
+  { key: 'pandit', name: 'Pandit Hindú' },
 ];
 
 interface Metrics {
@@ -64,6 +85,7 @@ export const WelcomeView = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
+  const [selectedGuide, setSelectedGuide] = useState('estoico');
 
   useEffect(() => {
     fetch('/api/metrics')
@@ -95,6 +117,7 @@ export const WelcomeView = ({
   }, [selectedPersonality, selectedPatientId]);
 
   const isPsicologo = selectedPersonality === 'psicologo';
+  const isEspiritual = selectedPersonality === 'espiritual';
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',
     year: 'numeric',
@@ -120,23 +143,40 @@ export const WelcomeView = ({
 
         <p className="text-muted-foreground mb-5 text-sm">Elige con quien quieres hablar</p>
 
-        <div className="mb-5 grid w-full max-w-sm grid-cols-2 gap-3">
+        <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
           {PERSONALITIES.map((p) => (
             <button
               key={p.key}
               onClick={() => onSelectPersonality(p.key)}
-              className={`flex flex-col items-center rounded-xl border-2 px-4 py-3 transition-all ${
+              className={`flex flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all ${
                 selectedPersonality === p.key
                   ? 'border-[var(--accent)] bg-[var(--accent)]/10 shadow-md'
                   : 'border-border hover:border-muted-foreground/50'
               }`}
             >
-              <span className="mb-1 text-2xl">{p.emoji}</span>
-              <span className="text-foreground text-sm font-semibold">{p.name}</span>
-              <span className="text-muted-foreground text-xs">{p.description}</span>
+              <span className="mb-1 text-xl">{p.emoji}</span>
+              <span className="text-foreground text-xs font-semibold">{p.name}</span>
+              <span className="text-muted-foreground text-[10px]">{p.description}</span>
             </button>
           ))}
         </div>
+
+        {/* Spiritual guide selector */}
+        {isEspiritual && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedGuide}
+              onChange={(e) => setSelectedGuide(e.target.value)}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {SPIRITUAL_GUIDES.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Dra. Ana patient selector */}
         {isPsicologo && (
@@ -274,7 +314,9 @@ export const WelcomeView = ({
           ) : (
             <Button
               size="lg"
-              onClick={() => onStartCall(selectedPersonality)}
+              onClick={() =>
+                onStartCall(isEspiritual ? selectedGuide : selectedPersonality)
+              }
               className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
             >
               {startButtonText}

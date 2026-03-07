@@ -26,6 +26,8 @@ Thumbs.db
 # Agent runtime data
 agent/metrics.json
 agent/sessions/
+agent/conversations/
+agent/agent.egg-info/
 
 # Claude
 .claude/

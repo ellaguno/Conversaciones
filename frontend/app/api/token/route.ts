@@ -18,15 +18,18 @@ const API_KEY = process.env.LIVEKIT_API_KEY!;
 const API_SECRET = process.env.LIVEKIT_API_SECRET!;
 const LIVEKIT_URL = process.env.LIVEKIT_URL!;
 
-const VALID_PERSONALITIES = new Set(['trader', 'abogado', 'psicologo', 'hippy']);
+const VALID_PERSONALITIES = new Set([
+  'trader', 'abogado', 'psicologo', 'hippy', 'normal',
+  'estoico', 'sacerdote', 'monje', 'imam', 'rabino', 'pandit',
+]);
 
 export const revalidate = 0;
 
 export async function POST(req: Request) {
   try {
-    // Rate limit: 5 requests per minute per IP
+    // Rate limit: 20 requests per minute per IP
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (!rateLimit(`token:${ip}`, 5, 60_000)) {
+    if (!rateLimit(`token:${ip}`, 20, 60_000)) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
