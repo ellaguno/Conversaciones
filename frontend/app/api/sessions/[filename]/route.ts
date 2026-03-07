@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 
 const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');
 
 function isPathSafe(filePath: string): boolean {
-  const { resolve } = require('path');
   return resolve(filePath).startsWith(resolve(SESSIONS_BASE));
 }
 

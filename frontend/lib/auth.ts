@@ -1,18 +1,5 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-
-function getAuthPassword(): string {
-  const configFile = join(process.cwd(), '..', 'auth-config.json');
-  if (existsSync(configFile)) {
-    try {
-      const data = JSON.parse(readFileSync(configFile, 'utf-8'));
-      if (data.password) return data.password;
-    } catch {}
-  }
-  return process.env.AUTH_ADMIN_PASSWORD || 'admin';
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -23,8 +10,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        // authorize() only runs in Node.js runtime (API route), never in Edge middleware
         const adminUser = process.env.AUTH_ADMIN_USER || 'admin';
-        const adminPass = getAuthPassword();
+        let adminPass = process.env.AUTH_ADMIN_PASSWORD || 'admin';
+
+        // Try reading password from config file (written by password change API)
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const fs = require('fs');
+          const configFile = process.env.AUTH_CONFIG_PATH || '../auth-config.json';
+          if (fs.existsSync(configFile)) {
+            const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+            if (data.password) adminPass = data.password;
+          }
+        } catch {}
 
         if (credentials?.username === adminUser && credentials?.password === adminPass) {
           return {
@@ -46,7 +45,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
       const isLoginPage = request.nextUrl.pathname === '/login';
-      const isApi = request.nextUrl.pathname.startsWith('/api');
 
       // Always allow login page and auth API routes
       if (isLoginPage || request.nextUrl.pathname.startsWith('/api/auth')) {

@@ -3,7 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { rateLimit } from '@/lib/rate-limit';
 
-const AUTH_CONFIG_FILE = join(process.cwd(), '..', 'auth-config.json');
+const AUTH_CONFIG_FILE =
+  process.env.AUTH_CONFIG_PATH || join(process.cwd(), '..', 'auth-config.json');
 
 function getStoredPassword(): string {
   if (existsSync(AUTH_CONFIG_FILE)) {
@@ -13,10 +14,6 @@ function getStoredPassword(): string {
     } catch {}
   }
   return process.env.AUTH_ADMIN_PASSWORD || 'admin';
-}
-
-export function getAuthPassword(): string {
-  return getStoredPassword();
 }
 
 export async function PUT(req: Request) {
