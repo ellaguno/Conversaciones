@@ -32,6 +32,11 @@ interface SettingsViewProps {
 export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
   const [draft, setDraft] = useState<Record<string, PersonalityConfig>>({ ...configs });
   const [selected, setSelected] = useState(ALL_PERSONALITIES[0].key);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMsg, setPasswordMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const current = draft[selected] || DEFAULT_CONFIGS[selected];
 
@@ -49,6 +54,38 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
 
   const handleReset = () => {
     setDraft({ ...DEFAULT_CONFIGS });
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordMsg(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ text: 'Las contraseñas no coinciden', error: true });
+      return;
+    }
+    if (newPassword.length < 4) {
+      setPasswordMsg({ text: 'Mínimo 4 caracteres', error: true });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/auth/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordMsg({ text: 'Contraseña cambiada', error: false });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordMsg({ text: data.error || 'Error', error: true });
+      }
+    } catch {
+      setPasswordMsg({ text: 'Error de conexion', error: true });
+    }
+    setChangingPassword(false);
   };
 
   return (
@@ -168,6 +205,48 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
           >
             Restaurar defaults
           </Button>
+        </div>
+
+        {/* Password change */}
+        <div className="mt-8 rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-4 text-sm font-bold text-foreground">Cambiar contraseña</h2>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Contraseña actual"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Nueva contraseña"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirmar nueva contraseña"
+              onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            {passwordMsg && (
+              <p className={`text-xs ${passwordMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
+                {passwordMsg.text}
+              </p>
+            )}
+            <Button
+              onClick={handleChangePassword}
+              disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+              variant="outline"
+              className="w-full rounded-full text-xs font-bold"
+            >
+              {changingPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

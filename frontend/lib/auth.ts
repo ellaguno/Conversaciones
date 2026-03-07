@@ -1,5 +1,18 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+
+function getAuthPassword(): string {
+  const configFile = join(process.cwd(), '..', 'auth-config.json');
+  if (existsSync(configFile)) {
+    try {
+      const data = JSON.parse(readFileSync(configFile, 'utf-8'));
+      if (data.password) return data.password;
+    } catch {}
+  }
+  return process.env.AUTH_ADMIN_PASSWORD || 'admin';
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -10,9 +23,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // In development, accept the configured admin user or any user if not configured
         const adminUser = process.env.AUTH_ADMIN_USER || 'admin';
-        const adminPass = process.env.AUTH_ADMIN_PASSWORD || 'admin';
+        const adminPass = getAuthPassword();
 
         if (credentials?.username === adminUser && credentials?.password === adminPass) {
           return {

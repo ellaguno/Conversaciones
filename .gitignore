@@ -29,6 +29,9 @@ agent/sessions/
 agent/conversations/
 agent/agent.egg-info/
 
+# Auth
+auth-config.json
+
 # Claude
 .claude/
 
