@@ -24,6 +24,34 @@
 - [x] Dashboard de metricas (tokens, costo, uso STT/TTS)
 - [x] API routes para CRUD de notas y lectura de sesiones
 
+### Fase 2.5: Seguridad + Nuevas Personalidades + Configuracion
+- [x] Autenticacion con NextAuth.js v5 (middleware, login, JWT)
+- [x] Rate limiting en todas las API routes (token bucket in-memory)
+- [x] Validacion de path traversal en frontend y agent
+- [x] Headers de seguridad (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
+- [x] Limite de transcripcion (500 turnos) y participantes por sala (2)
+- [x] Logs sanitizados (sin datos clinicos)
+- [x] 7 nuevas personalidades: Alguien Normal + 6 guias espirituales
+- [x] Transcripcion de conversaciones para todos los agentes (ConversationLog)
+- [x] Visor de conversaciones pasadas con renderizado Markdown
+- [x] Configuracion por personalidad (voz, visualizador, temperatura, nombre)
+  - [x] 33 voces Cartesia en espanol
+  - [x] 5 tipos de visualizador de audio
+  - [x] Slider de temperatura/creatividad
+  - [x] Persistencia en localStorage + room metadata
+- [x] Cambio de contrasena desde configuracion
+- [x] Boton de logout (Salir)
+- [x] Fix: double-click disconnect bug en view-controller
+
+### Fase 2.6: Enfoques Terapeuticos + Terapia de Pareja
+- [x] 5 enfoques terapeuticos para Dra. Ana: CBT, ACT, DBT, Mindfulness, Gestalt/Sistemica
+- [x] Selector de enfoque en formulario de nuevo paciente (solo primera sesion)
+- [x] Persistencia de enfoque en therapy_config.json por paciente
+- [x] Sesiones de seguimiento cargan automaticamente el enfoque guardado
+- [x] System prompt dinamico con tecnicas especificas del enfoque elegido
+- [x] Soporte para terapia de pareja (checkbox en nuevo paciente)
+- [x] Instrucciones especializadas de terapia de pareja (neutralidad, espacio equitativo)
+
 ## Fase 3: Market Dashboard + RAG (Pendiente)
 
 Objetivos:
@@ -34,13 +62,16 @@ Objetivos:
 - [ ] Base de conocimiento para el abogado (leyes, regulaciones)
 
 ### Ideas Adicionales
-- [ ] Autenticacion de usuarios
+- [ ] Autorizacion por paciente (requiere BD)
 - [ ] Persistencia en base de datos (reemplazar archivos .md)
-- [ ] Historial de conversaciones para todas las personalidades (no solo psicologo)
 - [ ] Exportacion de notas clinicas a PDF
 - [ ] Notificaciones de agenda (recordatorios de sesion)
+- [ ] Multiples usuarios con roles
 - [ ] Tests automatizados
 - [ ] CI/CD pipeline
+- [ ] Encripcion de datos clinicos en reposo
+- [ ] Content-Security-Policy header
+- [ ] Rate limiting distribuido (Redis)
 
 ## Decisiones Tecnicas
 
@@ -50,5 +81,9 @@ Objetivos:
 | Cartesia en lugar de ElevenLabs | ElevenLabs se quedo sin creditos gratuitos |
 | Archivos .md para persistencia | Simplicidad, legibilidad humana, sin setup de BD |
 | Room name para pasar personalidad | Room metadata no funciona con auto-dispatch de LiveKit |
+| Room metadata para config adicional | voiceId, temperature, therapyMethod, coupleTherapy |
 | Gemini 2.0 Flash | Costo muy bajo ($0.10/$0.40 por 1M tokens), velocidad alta |
 | livekit-agents 1.4.4 | API moderna con AgentServer + rtc_session decorator |
+| therapy_config.json por paciente | Persiste enfoque terapeutico sin modificar perfil.md |
+| localStorage para configs frontend | Configuracion por personalidad sin necesidad de backend |
+| NextAuth.js v5 con CredentialsProvider | Auth simple, JWT sessions, middleware-based |

@@ -4,7 +4,7 @@
 
 | Capa | Estado | Descripcion |
 |------|--------|-------------|
-| Capa 1: Autenticacion | Implementado | NextAuth.js con middleware, login page, credentials provider |
+| Capa 1: Autenticacion | Implementado | NextAuth.js con middleware, login, credentials, cambio de contrasena |
 | Capa 2: Autorizacion por paciente | Pendiente | Requiere BD de usuarios con relacion usuario-paciente |
 | Capa 3: Path traversal | Implementado | Validacion de filenames, `isPathSafe()`, sanitizacion en agent y SessionManager |
 | Capa 4: Rate limiting | Implementado | Token bucket in-memory en todas las API routes |
@@ -16,11 +16,12 @@
 
 ## Capa 1: Autenticacion (Implementado)
 
-### Archivos creados/modificados
+### Archivos
 
 - `frontend/lib/auth.ts` — Configuracion de NextAuth.js v5 con CredentialsProvider
 - `frontend/middleware.ts` — Protege todas las rutas excepto login y assets
 - `frontend/app/api/auth/[...nextauth]/route.ts` — Handler de NextAuth
+- `frontend/app/api/auth/password/route.ts` — Endpoint para cambio de contrasena
 - `frontend/app/login/page.tsx` — Pagina de login
 
 ### Configuracion
@@ -45,11 +46,24 @@ En produccion (`NODE_ENV=production`), la autenticacion esta **siempre activa**.
 4. Login valida contra `AUTH_ADMIN_USER`/`AUTH_ADMIN_PASSWORD`
 5. Se genera JWT de sesion
 
+### Cambio de Contrasena
+
+- Disponible desde la pagina de Configuracion
+- PUT `/api/auth/password` valida contrasena actual y guarda la nueva en `auth-config.json`
+- Rate limited a 5 peticiones por minuto
+- `auth-config.json` se lee antes que las variables de entorno (prioridad)
+
+### Logout
+
+- Boton "Salir" en la pantalla principal
+- Llama a `signOut()` de NextAuth y redirige a `/login`
+
 ### Notas
 
 - El guard `NODE_ENV !== 'development'` fue removido de `/api/token` (reemplazado por auth)
-- La personalidad se valida contra un Set de valores permitidos en el token route
+- La personalidad se valida contra un Set de 11 valores permitidos en el token route
 - El `patientId` se sanitiza en el token route antes de usarse en el room name
+- `therapyMethod` se acepta como string libre (validado en el agent contra THERAPY_METHODS)
 
 ---
 
@@ -80,8 +94,13 @@ Cada API route de sesiones deberia verificar que el usuario autenticado tenga ac
 - `isPathSafe()` — Verifica path en PUT y DELETE
 
 **`frontend/app/api/token/route.ts`**:
-- `VALID_PERSONALITIES` — Set que valida la personalidad recibida
+- `VALID_PERSONALITIES` — Set con las 11 personalidades validas
 - `patientId` se sanitiza con regex antes de usarse en room name
+
+**`frontend/app/api/conversations/[filename]/route.ts`**:
+- `isValidFilename()` — Solo acepta formato `YYYY-MM-DD_HH-MM.md`
+- `isValidPersonality()` — Solo alfanumerico, guion y guion bajo
+- Path traversal check con `resolve()` + prefijo
 
 ### Agent
 
@@ -105,10 +124,13 @@ Implementacion: Token bucket in-memory, sin dependencias externas. Limpieza auto
 
 | Ruta | Limite | Clave |
 |------|--------|-------|
-| POST `/api/token` | 5/min por IP | `token:{ip}` |
+| POST `/api/token` | 20/min por IP | `token:{ip}` |
 | GET `/api/sessions` | 60/min por IP | `sessions:{ip}` |
 | PUT `/api/sessions/notes` | 30/min por IP | `notes-put:{ip}` |
 | DELETE `/api/sessions/notes` | 10/min por IP | `notes-del:{ip}` |
+| GET `/api/conversations` | 60/min por IP | `conversations:{ip}` |
+| GET `/api/conversations/[filename]` | 60/min por IP | `conv-file:{ip}` |
+| PUT `/api/auth/password` | 5/min por IP | `password:{ip}` |
 
 Respuesta cuando se excede: HTTP 429 Too Many Requests.
 
@@ -145,21 +167,14 @@ Headers aplicados a todas las rutas (`/:path*`):
 
 **Archivo**: `agent/agent.py`
 
-Antes:
+Los logs ya no contienen contenido de las conversaciones terapeuticas:
 ```python
-logger.info(f"Transcripción [{item.role}]: {text[:80]}...")
+logger.info(f"Transcripcion [{item.role}]: {len(text)} caracteres")
 ```
-
-Ahora:
-```python
-logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
-```
-
-Los logs ya no contienen contenido de las conversaciones terapeuticas.
 
 ### Pendiente: Encripcion en reposo
 
-Las sesiones se almacenan como archivos .md en texto plano. Opciones para produccion:
+Las sesiones y conversaciones se almacenan como archivos .md en texto plano. Opciones para produccion:
 
 1. **Encripcion de disco**: LUKS (Linux), EBS encrypted (AWS), Persistent Disk encrypted (GCP)
 2. **Migracion a BD**: PostgreSQL con `pgcrypto` para encripcion de columnas
@@ -172,29 +187,25 @@ Las sesiones se almacenan como archivos .md en texto plano. Opciones para produc
 
 ### Limite de transcripcion
 
-**Archivo**: `agent/agent.py`
-
 ```python
 MAX_TRANSCRIPT_TURNS = 500
 ```
 
-Si la transcripcion alcanza 500 turnos, se ignoran los adicionales con un warning en el log. Esto previene crecimiento ilimitado de memoria.
+Si la transcripcion alcanza 500 turnos, se ignoran los adicionales con un warning en el log.
 
 ### Limite de participantes por sala
-
-**Archivo**: `frontend/app/api/token/route.ts`
 
 ```typescript
 maxParticipants: 2  // solo el usuario y el agente
 ```
 
-Previene que multiples usuarios se unan a la misma sala.
-
 ### Warning de personalidad desconocida
 
-**Archivo**: `agent/agent.py`
+Si el room name contiene una personalidad que no existe en `PERSONALITIES`, se loguea un warning y se usa la personalidad por defecto (`trader`) como fallback.
 
-Si el room name contiene una personalidad que no existe en `PERSONALITIES`, se loguea un warning. El agente usa la personalidad por defecto (`trader`) como fallback.
+### Validacion de metodo terapeutico
+
+El agent valida `therapyMethod` contra `THERAPY_METHODS` dict. Si el valor no existe, usa `DEFAULT_THERAPY_METHOD` (CBT) como fallback.
 
 ---
 
@@ -205,7 +216,7 @@ Si el room name contiene una personalidad que no existe en `PERSONALITIES`, se l
 AUTH_ENABLED=true              # Activar autenticacion (siempre activa en produccion)
 AUTH_SECRET=<random_base64>    # Secreto para firmar JWTs de sesion
 AUTH_ADMIN_USER=admin          # Usuario administrador
-AUTH_ADMIN_PASSWORD=<seguro>   # Contraseña del administrador
+AUTH_ADMIN_PASSWORD=<seguro>   # Contrasena del administrador
 ```
 
 Generar `AUTH_SECRET`:

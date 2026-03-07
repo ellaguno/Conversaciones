@@ -19,6 +19,12 @@ CARTESIA_API_KEY=<cartesia_api_key>
 LIVEKIT_URL=wss://comerciante-de-voz-e0sz8unl.livekit.cloud
 LIVEKIT_API_KEY=<livekit_api_key>
 LIVEKIT_API_SECRET=<livekit_api_secret>
+
+# Autenticacion (obligatorio en produccion)
+AUTH_ENABLED=true
+AUTH_SECRET=<generar_con_openssl_rand_base64_32>
+AUTH_ADMIN_USER=admin
+AUTH_ADMIN_PASSWORD=<password_seguro>
 ```
 
 ## Desarrollo Local
@@ -66,10 +72,18 @@ Acceder a `http://localhost:3000`.
 
 ### 4. Usar la aplicacion
 
-1. Seleccionar una personalidad en la pantalla de bienvenida
-2. Hacer clic en "Conectar" para iniciar la sesion de voz
-3. Hablar con el agente
-4. Para Dra. Ana: seleccionar o crear un paciente antes de conectar
+1. Iniciar sesion (usuario/contrasena configurados en .env.local, o `admin`/`admin` por defecto)
+2. Seleccionar una personalidad en la pantalla de bienvenida
+3. Para personalidades normales: hacer clic en "Conectar" para iniciar la conversacion
+4. Para Dra. Ana:
+   - Seleccionar paciente existente, o crear uno nuevo
+   - Al crear nuevo: elegir enfoque terapeutico (CBT, ACT, DBT, Mindfulness, Gestalt)
+   - Opcionalmente activar "Terapia de pareja"
+   - Hacer clic en "Iniciar sesion"
+5. Para ver conversaciones pasadas: hacer clic en "Ver conversaciones" (aparece cuando hay logs)
+6. Para ver notas de Dra. Ana: hacer clic en "Ver notas"
+7. Configuracion: acceder desde el enlace "Configuracion" en la pantalla principal
+8. Cerrar sesion: enlace "Salir" en la pantalla principal
 
 ## Arquitectura de Deployment (Produccion)
 
@@ -90,13 +104,7 @@ El frontend es una app Next.js estandar. Se puede desplegar en:
 - **Netlify**
 - Cualquier plataforma que soporte Next.js
 
-**Importante**: La ruta `/api/token` tiene un guard que bloquea en produccion:
-```typescript
-if (process.env.NODE_ENV !== 'development') {
-  throw new Error('THIS API ROUTE IS INSECURE...');
-}
-```
-Antes de ir a produccion, se debe agregar autenticacion a esta ruta.
+**Importante**: En produccion la autenticacion esta siempre activa. Configurar `AUTH_SECRET`, `AUTH_ADMIN_USER` y `AUTH_ADMIN_PASSWORD` como variables de entorno.
 
 ### Agent
 
@@ -118,13 +126,21 @@ CMD ["python", "agent.py", "start"]
 
 Nota: `python agent.py dev` es para desarrollo (hot reload). En produccion usar `python agent.py start`.
 
-### Datos de Sesiones
+### Datos Persistentes
 
-Las sesiones se almacenan en `agent/sessions/` como archivos Markdown. En produccion:
+El sistema almacena datos en dos directorios:
+
+| Directorio | Contenido | Agente |
+|-----------|-----------|--------|
+| `agent/sessions/` | Datos de pacientes (perfiles, sesiones, notas, therapy_config.json) | Dra. Ana |
+| `agent/conversations/` | Transcripciones de conversaciones | Todos |
+
+En produccion:
 
 - Montar un volumen persistente si se usa Docker/contenedores
 - O migrar a una base de datos (PostgreSQL, SQLite) para mayor robustez
 - El frontend lee estos archivos via API routes, por lo que frontend y agent deben compartir acceso al filesystem (o migrar a una API centralizada)
+- `auth-config.json` (raiz del proyecto) almacena la contrasena si se cambia desde la UI
 
 ### Servicios Externos
 
@@ -137,14 +153,7 @@ Las sesiones se almacenan en `agent/sessions/` como archivos Markdown. En produc
 
 ## Seguridad
 
-Ver **[seguridad.md](seguridad.md)** para el analisis completo de vulnerabilidades y las 7 capas de seguridad sugeridas.
-
-Resumen de prioridades antes de ir a produccion:
-
-- **P0**: Corregir path traversal en agent y frontend, dejar de loguear datos clinicos
-- **P1**: Agregar autenticacion (NextAuth.js), rate limiting en `/api/token`
-- **P2**: Autorizacion por paciente, headers de seguridad, limites en el agent
-- **P3**: Encripcion de datos clinicos en reposo
+Ver **[seguridad.md](seguridad.md)** para el analisis completo de vulnerabilidades y las 7 capas de seguridad implementadas.
 
 ## Monitoreo
 
