@@ -8,6 +8,7 @@ import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
 import { NotesView } from '@/components/app/notes-view';
 import { WelcomeView } from '@/components/app/welcome-view';
+import type { PersonalityConfig } from '@/lib/personalities-config';
 
 const MotionWelcomeView = motion.create(WelcomeView);
 const MotionSessionView = motion.create(AgentSessionView_01);
@@ -31,6 +32,8 @@ interface ViewControllerProps {
   onStartCall: (personality: string, patientId?: string) => void;
   autoConnect?: boolean;
   onDisconnected?: () => void;
+  personalityConfig: PersonalityConfig;
+  onOpenSettings: () => void;
 }
 
 export function ViewController({
@@ -41,6 +44,8 @@ export function ViewController({
   onStartCall,
   autoConnect,
   onDisconnected,
+  personalityConfig,
+  onOpenSettings,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
@@ -88,6 +93,7 @@ export function ViewController({
           onSelectPersonality={onSelectPersonality}
           onStartCall={onStartCall}
           onViewNotes={() => setShowNotes(true)}
+          onOpenSettings={onOpenSettings}
         />
       )}
       {isConnected && (
@@ -99,17 +105,11 @@ export function ViewController({
           supportsVideoInput={appConfig.supportsVideoInput}
           supportsScreenShare={appConfig.supportsScreenShare}
           isPreConnectBufferEnabled={appConfig.isPreConnectBufferEnabled}
-          audioVisualizerType={
-            activePersonality === 'psicologo' ? 'aura' : appConfig.audioVisualizerType
-          }
+          audioVisualizerType={personalityConfig.visualizer || appConfig.audioVisualizerType}
           audioVisualizerColor={
-            activePersonality === 'psicologo'
-              ? resolvedTheme === 'dark'
-                ? '#7c3aed'
-                : '#8b5cf6'
-              : resolvedTheme === 'dark'
-                ? appConfig.audioVisualizerColorDark
-                : appConfig.audioVisualizerColor
+            resolvedTheme === 'dark'
+              ? appConfig.audioVisualizerColorDark
+              : appConfig.audioVisualizerColor
           }
           audioVisualizerColorShift={appConfig.audioVisualizerColorShift}
           audioVisualizerBarCount={appConfig.audioVisualizerBarCount}

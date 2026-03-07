@@ -70,6 +70,7 @@ interface WelcomeViewProps {
   onSelectPersonality: (personality: string) => void;
   onStartCall: (personality: string, patientId?: string) => void;
   onViewNotes?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const WelcomeView = ({
@@ -78,6 +79,7 @@ export const WelcomeView = ({
   onSelectPersonality,
   onStartCall,
   onViewNotes,
+  onOpenSettings,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -323,6 +325,16 @@ export const WelcomeView = ({
             </Button>
           )}
         </div>
+
+        {/* Settings link */}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="text-muted-foreground hover:text-foreground mt-4 text-xs underline transition-colors"
+          >
+            Configuracion
+          </button>
+        )}
       </section>
     </div>
   );

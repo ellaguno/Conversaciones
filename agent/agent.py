@@ -63,6 +63,8 @@ async def entrypoint(ctx: JobContext):
     # Parse room name: room_{personality}_{patient_id}_{random} or room_{personality}_{random}
     personality_key = DEFAULT_PERSONALITY
     patient_id = None
+    custom_voice_id = None
+    custom_temperature = None
     room_name = room.name or ""
     logger.info(f"Room name: '{room_name}'")
 
@@ -78,6 +80,15 @@ async def entrypoint(ctx: JobContext):
             raw_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
             patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
             logger.info(f"Patient ID: '{patient_id}'")
+
+    # Parse room metadata for custom voice/temperature
+    room_metadata = room.metadata or ""
+    try:
+        meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
+        custom_voice_id = meta.get("voiceId")
+        custom_temperature = meta.get("temperature")
+    except (json.JSONDecodeError, TypeError):
+        pass
 
     personality = PERSONALITIES[personality_key]
     logger.info(f"Iniciando agente: {personality['name']} (key={personality_key})")
@@ -104,6 +115,11 @@ async def entrypoint(ctx: JobContext):
     # Conversation log for all personalities
     conv_log = ConversationLog(personality_key, personality["name"])
 
+    # Use custom voice/temperature if provided, otherwise use personality defaults
+    voice_id = custom_voice_id or personality["voice_id"]
+    temperature = custom_temperature if custom_temperature is not None else 0.7
+    logger.info(f"Voice: {voice_id}, Temperature: {temperature}")
+
     session = AgentSession(
         stt=deepgram.STT(
             model="nova-3",
@@ -113,11 +129,12 @@ async def entrypoint(ctx: JobContext):
             model="google/gemini-2.0-flash-001",
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=temperature,
         ),
         tts=cartesia.TTS(
             model="sonic-3",
             language="es",
-            voice=personality["voice_id"],
+            voice=voice_id,
             api_key=os.getenv("CARTESIA_API_KEY"),
         ),
     )

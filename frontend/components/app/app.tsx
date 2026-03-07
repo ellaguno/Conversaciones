@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TokenSource } from 'livekit-client';
 import { useSession } from '@livekit/components-react';
 import { WarningIcon } from '@phosphor-icons/react/dist/ssr';
@@ -8,9 +8,16 @@ import type { AppConfig } from '@/app-config';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
 import { StartAudioButton } from '@/components/agents-ui/start-audio-button';
 import { ViewController } from '@/components/app/view-controller';
+import { SettingsView } from '@/components/app/settings-view';
 import { Toaster } from '@/components/ui/sonner';
 import { useAgentErrors } from '@/hooks/useAgentErrors';
 import { useDebugMode } from '@/hooks/useDebug';
+import {
+  type PersonalityConfig,
+  loadConfigs,
+  saveConfigs,
+  getConfig,
+} from '@/lib/personalities-config';
 
 const IN_DEVELOPMENT = process.env.NODE_ENV !== 'production';
 
@@ -33,6 +40,8 @@ function SessionInner({
   onSelectPersonality,
   onStartCall,
   onDisconnected,
+  personalityConfig,
+  onOpenSettings,
 }: {
   appConfig: AppConfig;
   personality: string;
@@ -42,20 +51,27 @@ function SessionInner({
   onSelectPersonality: (p: string) => void;
   onStartCall: (p: string, patientId?: string) => void;
   onDisconnected: () => void;
+  personalityConfig: PersonalityConfig;
+  onOpenSettings: () => void;
 }) {
   const tokenSource = useMemo(() => {
     return TokenSource.custom(async () => {
       const res = await fetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personality, patientId }),
+        body: JSON.stringify({
+          personality,
+          patientId,
+          voiceId: personalityConfig.voiceId,
+          temperature: personalityConfig.temperature,
+        }),
       });
       if (!res.ok) {
         throw new Error(`Token error: ${res.status}`);
       }
       return await res.json();
     });
-  }, [personality, patientId]);
+  }, [personality, patientId, personalityConfig.voiceId, personalityConfig.temperature]);
 
   const session = useSession(
     tokenSource,
@@ -74,6 +90,8 @@ function SessionInner({
           onStartCall={onStartCall}
           autoConnect={autoConnect}
           onDisconnected={onDisconnected}
+          personalityConfig={personalityConfig}
+          onOpenSettings={onOpenSettings}
         />
       </main>
       <StartAudioButton label="Start Audio" />
@@ -99,6 +117,12 @@ export function App({ appConfig }: AppProps) {
   const [activePatientId, setActivePatientId] = useState('');
   const [sessionId, setSessionId] = useState(0);
   const [autoConnect, setAutoConnect] = useState(false);
+  const [configs, setConfigs] = useState<Record<string, PersonalityConfig>>({});
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    setConfigs(loadConfigs());
+  }, []);
 
   const handleStartCall = useCallback((personality: string, patientId?: string) => {
     setSelectedPersonality(personality);
@@ -112,6 +136,23 @@ export function App({ appConfig }: AppProps) {
     setAutoConnect(false);
   }, []);
 
+  const handleSaveConfigs = useCallback((newConfigs: Record<string, PersonalityConfig>) => {
+    setConfigs(newConfigs);
+    saveConfigs(newConfigs);
+  }, []);
+
+  if (showSettings) {
+    return (
+      <SettingsView
+        configs={configs}
+        onSave={handleSaveConfigs}
+        onBack={() => setShowSettings(false)}
+      />
+    );
+  }
+
+  const activeConfig = getConfig(configs, activePersonality);
+
   return (
     <SessionInner
       key={sessionId}
@@ -123,6 +164,8 @@ export function App({ appConfig }: AppProps) {
       onSelectPersonality={setSelectedPersonality}
       onStartCall={handleStartCall}
       onDisconnected={handleDisconnected}
+      personalityConfig={activeConfig}
+      onOpenSettings={() => setShowSettings(true)}
     />
   );
 }

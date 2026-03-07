@@ -42,6 +42,8 @@ export async function POST(req: Request) {
     const personality = VALID_PERSONALITIES.has(rawPersonality) ? rawPersonality : 'trader';
     const rawPatientId = body?.patientId || '';
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const voiceId = body?.voiceId || '';
+    const temperature = typeof body?.temperature === 'number' ? body.temperature : null;
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
@@ -53,9 +55,16 @@ export async function POST(req: Request) {
     // Create room with metadata via RoomService API
     const httpUrl = LIVEKIT_URL.replace('wss://', 'https://');
     const roomService = new RoomServiceClient(httpUrl, API_KEY, API_SECRET);
+    // Pack config into metadata as JSON
+    const metadata = JSON.stringify({
+      personality,
+      ...(voiceId && { voiceId }),
+      ...(temperature !== null && { temperature }),
+    });
+
     await roomService.createRoom({
       name: roomName,
-      metadata: personality,
+      metadata,
       emptyTimeout: 60,
       maxParticipants: 2,
     });
