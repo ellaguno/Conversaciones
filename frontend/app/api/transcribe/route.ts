@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { auth } from '@/lib/auth';
 import { getUserDataDir } from '@/lib/data-paths';
@@ -172,6 +172,50 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Transcribe error:', error);
     return NextResponse.json({ error: 'Error procesando transcripcion' }, { status: 500 });
+  }
+}
+
+export const revalidate = 0;
+
+export async function GET(req: Request) {
+  try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`transcribe-list:${ip}`, 30, 60_000)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+
+    const transcriptionsDir = join(getUserDataDir(session.user.id), 'transcriptions');
+    if (!existsSync(transcriptionsDir)) {
+      return NextResponse.json({ transcriptions: [] });
+    }
+
+    const files = readdirSync(transcriptionsDir)
+      .filter((f) => f.endsWith('.md'))
+      .sort()
+      .reverse();
+
+    const transcriptions = files.map((f) => {
+      const stat = statSync(join(transcriptionsDir, f));
+      // Parse filename: YYYY-MM-DD_HH-MM_originalname.md
+      const match = f.match(/^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})_(.+)\.md$/);
+      return {
+        filename: f,
+        date: match ? match[1] : '',
+        time: match ? match[2].replace('-', ':') : '',
+        originalName: match ? match[3].replace(/_/g, ' ') : f,
+        size: stat.size,
+      };
+    });
+
+    return NextResponse.json({ transcriptions });
+  } catch (error) {
+    console.error('Error listing transcriptions:', error);
+    return NextResponse.json({ transcriptions: [] });
   }
 }
 
