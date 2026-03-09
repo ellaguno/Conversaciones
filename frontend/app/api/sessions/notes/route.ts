@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
+import { auth } from '@/lib/auth';
+import { getUserSessionsDir } from '@/lib/data-paths';
 import { rateLimit } from '@/lib/rate-limit';
-
-const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');
 
 const FILE_MAP: Record<string, string> = {
   profile: 'perfil.md',
@@ -20,13 +20,9 @@ function isValidSessionFilename(filename: string): boolean {
   return /^\d{4}-\d{2}-\d{2}_sesion_\d{3}\.md$/.test(filename);
 }
 
-function isPathSafe(filePath: string): boolean {
-  return resolve(filePath).startsWith(resolve(SESSIONS_BASE));
-}
-
-function getPatientDir(patientId: string): string {
+function getPatientDir(sessionsBase: string, patientId: string): string {
   const safeId = patientId.replace(/[^a-zA-Z0-9_-]/g, '');
-  return join(SESSIONS_BASE, safeId);
+  return join(sessionsBase, safeId);
 }
 
 function resolveFilePath(patientDir: string, noteType: string, filename?: string): string | null {
@@ -51,6 +47,13 @@ export async function PUT(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const sessionsBase = getUserSessionsDir(userId);
+
     const body = await req.json();
     const { noteType, filename, content, patientId } = body;
 
@@ -58,9 +61,9 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'patientId requerido' }, { status: 400 });
     }
 
-    const patientDir = getPatientDir(patientId);
+    const patientDir = getPatientDir(sessionsBase, patientId);
     const filePath = resolveFilePath(patientDir, noteType, filename);
-    if (!filePath || !isPathSafe(filePath)) {
+    if (!filePath || !resolve(filePath).startsWith(resolve(sessionsBase))) {
       return NextResponse.json({ error: 'Tipo de nota invalido' }, { status: 400 });
     }
 
@@ -86,6 +89,13 @@ export async function DELETE(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const sessionsBase = getUserSessionsDir(userId);
+
     const body = await req.json();
     const { noteType, filename, patientId } = body;
 
@@ -93,9 +103,9 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'patientId requerido' }, { status: 400 });
     }
 
-    const patientDir = getPatientDir(patientId);
+    const patientDir = getPatientDir(sessionsBase, patientId);
     const filePath = resolveFilePath(patientDir, noteType, filename);
-    if (!filePath || !isPathSafe(filePath)) {
+    if (!filePath || !resolve(filePath).startsWith(resolve(sessionsBase))) {
       return NextResponse.json({ error: 'Tipo de nota invalido' }, { status: 400 });
     }
 

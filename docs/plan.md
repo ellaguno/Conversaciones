@@ -43,7 +43,7 @@
 - [x] Boton de logout (Salir)
 - [x] Fix: double-click disconnect bug en view-controller
 
-### Fase 2.6: Enfoques Terapeuticos + Terapia de Pareja
+### Fase 2.6: Enfoques Terapeuticos + Terapia de Pareja + LLM Configurable
 - [x] 5 enfoques terapeuticos para Dra. Ana: CBT, ACT, DBT, Mindfulness, Gestalt/Sistemica
 - [x] Selector de enfoque en formulario de nuevo paciente (solo primera sesion)
 - [x] Persistencia de enfoque en therapy_config.json por paciente
@@ -51,6 +51,21 @@
 - [x] System prompt dinamico con tecnicas especificas del enfoque elegido
 - [x] Soporte para terapia de pareja (checkbox en nuevo paciente)
 - [x] Instrucciones especializadas de terapia de pareja (neutralidad, espacio equitativo)
+- [x] Modelo LLM configurable por personalidad desde el frontend
+- [x] Analisis clinico con Claude Sonnet 4 via OpenRouter (ANALYSIS_MODEL configurable)
+- [x] Documentacion completa: guia del administrador + guia del usuario
+
+### Fase 2.7: Sistema Multi-Usuario
+- [x] Sistema de usuarios con `users.json` (bcrypt para passwords)
+- [x] Aislamiento de datos por usuario (`data/{userId}/`)
+- [x] JWT lleva `id` y `role` del usuario
+- [x] Panel de admin: crear, editar, eliminar usuarios
+- [x] Soft-delete de usuarios (datos se conservan como respaldo)
+- [x] userId se pasa al agent via room metadata
+- [x] Agent guarda sesiones, conversaciones y metricas por usuario
+- [x] Migracion automatica de datos existentes a `data/admin/`
+- [x] Proteccion de ruta `/admin` solo para rol admin
+- [x] Preparado para OAuth futuro (Google, MSFT, FB)
 
 ## Fase 3: Market Dashboard + RAG (Pendiente)
 
@@ -87,3 +102,5 @@ Objetivos:
 | therapy_config.json por paciente | Persiste enfoque terapeutico sin modificar perfil.md |
 | localStorage para configs frontend | Configuracion por personalidad sin necesidad de backend |
 | NextAuth.js v5 con CredentialsProvider | Auth simple, JWT sessions, middleware-based |
+| Claude Sonnet 4 para notas clinicas | Mayor calidad de analisis clinico vs Gemini para tareas simples |
+| ANALYSIS_MODEL configurable via env | Flexibilidad para cambiar modelo de analisis sin cambiar codigo |

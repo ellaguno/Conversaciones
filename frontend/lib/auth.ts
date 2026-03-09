@@ -10,30 +10,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // authorize() only runs in Node.js runtime (API route), never in Edge middleware
-        const adminUser = process.env.AUTH_ADMIN_USER || 'admin';
-        let adminPass = process.env.AUTH_ADMIN_PASSWORD || 'admin';
+        // Dynamic import to avoid Node.js APIs in Edge Runtime (middleware)
+        const { getUserByUsername, initUsersIfNeeded, verifyPassword } = await import('./users');
 
-        // Try reading password from config file (written by password change API)
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const fs = require('fs');
-          const configFile = process.env.AUTH_CONFIG_PATH || '../auth-config.json';
-          if (fs.existsSync(configFile)) {
-            const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-            if (data.password) adminPass = data.password;
-          }
-        } catch {}
+        // Ensure users.json exists with seed admin on first run
+        initUsersIfNeeded();
 
-        if (credentials?.username === adminUser && credentials?.password === adminPass) {
-          return {
-            id: '1',
-            name: adminUser,
-            email: `${adminUser}@local`,
-          };
-        }
+        const username = credentials?.username as string | undefined;
+        const password = credentials?.password as string | undefined;
+        if (!username || !password) return null;
 
-        return null;
+        const user = getUserByUsername(username);
+        if (!user) return null;
+
+        if (!verifyPassword(password, user.passwordHash)) return null;
+
+        return {
+          id: user.id,
+          name: user.displayName,
+          email: `${user.username}@local`,
+          role: user.role,
+        };
       },
     }),
   ],
@@ -42,6 +39,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/login',
   },
   callbacks: {
+    jwt({ token, user }) {
+      // On sign-in, persist id and role into the JWT
+      if (user) {
+        token.id = user.id as string;
+        token.role = (user as { role?: string }).role || 'user';
+      }
+      return token;
+    },
+    session({ session, token }) {
+      // Expose id and role on the session object
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
+      }
+      return session;
+    },
     authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
       const isLoginPage = request.nextUrl.pathname === '/login';
@@ -59,6 +72,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Protect everything else
       if (!isLoggedIn) {
         return false; // Redirect to login
+      }
+
+      // Protect admin routes
+      if (request.nextUrl.pathname.startsWith('/admin')) {
+        const role = auth?.user?.role;
+        if (role !== 'admin') {
+          return Response.redirect(new URL('/', request.nextUrl));
+        }
       }
 
       return true;

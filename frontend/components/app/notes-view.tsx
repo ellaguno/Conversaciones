@@ -235,6 +235,7 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
     noteType: string;
     filename?: string;
   } | null>(null);
+  const [confirmDeletePatient, setConfirmDeletePatient] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
@@ -361,6 +362,22 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
     setConfirmDelete(payload);
   };
 
+  const handleDeletePatient = async () => {
+    if (!confirmDeletePatient) return;
+    try {
+      await fetch('/api/sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId: confirmDeletePatient }),
+      });
+      setConfirmDeletePatient(null);
+      setSelectedPatient(null);
+      fetchData();
+    } catch {
+      alert('Error al eliminar paciente');
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-background text-muted-foreground fixed inset-0 flex items-center justify-center">
@@ -441,26 +458,54 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
             </button>
           )}
 
+          {confirmDeletePatient && (
+            <ConfirmDialog
+              message={`¿Eliminar al paciente "${patients.find((p) => p.id === confirmDeletePatient)?.name || confirmDeletePatient}"? Los datos se conservaran como respaldo pero no seran visibles.`}
+              onConfirm={handleDeletePatient}
+              onCancel={() => setConfirmDeletePatient(null)}
+            />
+          )}
+
           {patients.length === 0 ? (
             <EmptyState message="No hay pacientes registrados. Crea uno nuevo para comenzar." />
           ) : (
             <div className="flex flex-col gap-2">
               {patients.map((p) => (
-                <button
+                <div
                   key={p.id}
-                  onClick={() => setSelectedPatient(p)}
-                  className="border-border bg-card flex items-center gap-3 rounded-xl border p-4 text-left transition-all hover:border-purple-400 hover:shadow-md"
+                  className="border-border bg-card flex items-center gap-3 rounded-xl border p-4 transition-all hover:border-purple-400 hover:shadow-md"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg dark:bg-purple-900/40">
-                    👤
-                  </div>
-                  <div>
-                    <p className="text-foreground font-semibold">{p.name}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {p.sessions.length} {p.sessions.length === 1 ? 'sesion' : 'sesiones'}
-                    </p>
-                  </div>
-                </button>
+                  <button
+                    onClick={() => setSelectedPatient(p)}
+                    className="flex flex-1 items-center gap-3 text-left"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg dark:bg-purple-900/40">
+                      👤
+                    </div>
+                    <div>
+                      <p className="text-foreground font-semibold">{p.name}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {p.sessions.length} {p.sessions.length === 1 ? 'sesion' : 'sesiones'}
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeletePatient(p.id)}
+                    className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                    title="Eliminar paciente"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    </svg>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -590,12 +635,19 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
 
   return (
     <div className="bg-background fixed inset-0 flex flex-col">
-      {/* Confirm dialog */}
+      {/* Confirm dialogs */}
       {confirmDelete && (
         <ConfirmDialog
           message="¿Estas seguro de que quieres borrar esta nota? Esta accion no se puede deshacer."
           onConfirm={handleDelete}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+      {confirmDeletePatient && (
+        <ConfirmDialog
+          message={`¿Eliminar al paciente "${selectedPatient.name}"? Los datos se conservaran como respaldo pero no seran visibles.`}
+          onConfirm={handleDeletePatient}
+          onCancel={() => setConfirmDeletePatient(null)}
         />
       )}
 
@@ -626,6 +678,13 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
               className="rounded-full bg-purple-600 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-purple-700"
             >
               Iniciar sesion
+            </button>
+            <button
+              onClick={() => setConfirmDeletePatient(selectedPatient.id)}
+              className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+              title="Eliminar paciente"
+            >
+              Eliminar
             </button>
             <button
               onClick={onBack}

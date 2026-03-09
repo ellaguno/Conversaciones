@@ -1,26 +1,18 @@
 import { NextResponse } from 'next/server';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-
-const AUTH_CONFIG_FILE =
-  process.env.AUTH_CONFIG_PATH || join(process.cwd(), '..', 'auth-config.json');
-
-function getStoredPassword(): string {
-  if (existsSync(AUTH_CONFIG_FILE)) {
-    try {
-      const data = JSON.parse(readFileSync(AUTH_CONFIG_FILE, 'utf-8'));
-      if (data.password) return data.password;
-    } catch {}
-  }
-  return process.env.AUTH_ADMIN_PASSWORD || 'admin';
-}
+import { getUserById, updateUser, verifyPassword } from '@/lib/users';
 
 export async function PUT(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     if (!rateLimit(`password:${ip}`, 5, 60_000)) {
       return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
     const body = await req.json();
@@ -37,14 +29,16 @@ export async function PUT(req: Request) {
       );
     }
 
-    // Verify current password
-    const storedPassword = getStoredPassword();
-    if (currentPassword !== storedPassword) {
+    const user = getUserById(session.user.id);
+    if (!user) {
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
+    }
+
+    if (!verifyPassword(currentPassword, user.passwordHash)) {
       return NextResponse.json({ error: 'Contraseña actual incorrecta' }, { status: 403 });
     }
 
-    // Save new password
-    writeFileSync(AUTH_CONFIG_FILE, JSON.stringify({ password: newPassword }), 'utf-8');
+    updateUser(session.user.id, { password: newPassword });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

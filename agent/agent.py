@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+from livekit import api
 from livekit.agents import Agent, AgentSession, JobContext, AgentServer, cli
 from livekit.plugins import deepgram, openai, cartesia
 from personalities import (
@@ -24,7 +25,7 @@ load_dotenv(dotenv_path=".env.local")
 logger = logging.getLogger("comerciante-con-voz")
 logger.setLevel(logging.INFO)
 
-METRICS_FILE = Path(__file__).parent / "metrics.json"
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 # Cost per 1M tokens (Gemini 2.0 Flash via OpenRouter)
 LLM_COST_PER_1M_INPUT = 0.10
@@ -32,16 +33,25 @@ LLM_COST_PER_1M_OUTPUT = 0.40
 MAX_TRANSCRIPT_TURNS = 500
 
 
-def _load_metrics() -> dict:
-    if METRICS_FILE.exists():
-        return json.loads(METRICS_FILE.read_text())
+def _get_metrics_file(user_id: str) -> Path:
+    safe_user = re.sub(r'[^a-zA-Z0-9_-]', '', user_id) or "default"
+    metrics_dir = DATA_DIR / safe_user
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    return metrics_dir / "metrics.json"
+
+
+def _load_metrics(user_id: str) -> dict:
+    mf = _get_metrics_file(user_id)
+    if mf.exists():
+        return json.loads(mf.read_text())
     return {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0,
             "total_cost_usd": 0.0, "llm_calls": 0, "tts_characters": 0,
             "stt_audio_seconds": 0.0}
 
 
-def _save_metrics(m: dict):
-    METRICS_FILE.write_text(json.dumps(m, indent=2))
+def _save_metrics(user_id: str, m: dict):
+    mf = _get_metrics_file(user_id)
+    mf.write_text(json.dumps(m, indent=2))
 
 
 class ComercianteAgent(Agent):
@@ -82,11 +92,23 @@ async def entrypoint(ctx: JobContext):
             patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
             logger.info(f"Patient ID: '{patient_id}'")
 
-    # Parse room metadata for custom voice/temperature/model/therapy config
+    # Parse room metadata for custom voice/temperature/model/therapy config/userId
+    # room.metadata may be empty due to timing — fetch via API as fallback
     room_metadata = room.metadata or ""
+    if not room_metadata and room_name:
+        try:
+            rooms_list = await ctx.api.room.list_rooms(api.ListRoomsRequest(names=[room_name]))
+            for r in rooms_list.rooms:
+                if r.name == room_name and r.metadata:
+                    room_metadata = r.metadata
+                    break
+        except Exception as e:
+            logger.warning(f"Error fetching room metadata via API: {e}")
+    logger.info(f"Raw room metadata: '{room_metadata}'")
     custom_model = None
     therapy_method = None
     couple_therapy = False
+    user_id = "default"
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
@@ -94,8 +116,13 @@ async def entrypoint(ctx: JobContext):
         custom_model = meta.get("model")
         therapy_method = meta.get("therapyMethod")
         couple_therapy = bool(meta.get("coupleTherapy", False))
+        user_id = meta.get("userId", "default")
     except (json.JSONDecodeError, TypeError):
         pass
+
+    # Sanitize user_id
+    user_id = re.sub(r'[^a-zA-Z0-9_-]', '', user_id) or "default"
+    logger.info(f"User ID: '{user_id}'")
 
     personality = PERSONALITIES[personality_key]
     logger.info(f"Iniciando agente: {personality['name']} (key={personality_key})")
@@ -107,7 +134,7 @@ async def entrypoint(ctx: JobContext):
 
     if personality.get("has_therapy_tools"):
         # Dra. Ana with full session management + therapy tools
-        manager = SessionManager(patient_id=patient_id or "default")
+        manager = SessionManager(patient_id=patient_id or "default", user_id=user_id)
         tools = create_therapy_tools(manager)
 
         if manager.is_first_session():
@@ -135,8 +162,8 @@ async def entrypoint(ctx: JobContext):
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
             logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()} - Método: {method_key}")
 
-    # Conversation log for all personalities
-    conv_log = ConversationLog(personality_key, personality["name"])
+    # Conversation log for all personalities (user-scoped)
+    conv_log = ConversationLog(personality_key, personality["name"], user_id=user_id)
 
     # Use custom voice/temperature/model if provided, otherwise use personality defaults
     voice_id = custom_voice_id or personality["voice_id"]
@@ -163,12 +190,12 @@ async def entrypoint(ctx: JobContext):
         ),
     )
 
-    # Metrics collection for all personalities
+    # Metrics collection for all personalities (user-scoped)
     @session.on("metrics_collected")
     def on_metrics(event):
         m = event.metrics
         try:
-            data = _load_metrics()
+            data = _load_metrics(user_id)
             if hasattr(m, "total_tokens"):  # LLM metrics
                 data["total_tokens"] += m.total_tokens
                 data["prompt_tokens"] += m.prompt_tokens
@@ -181,7 +208,7 @@ async def entrypoint(ctx: JobContext):
                 data["tts_characters"] += m.characters_count
             elif hasattr(m, "audio_duration"):  # STT metrics
                 data["stt_audio_seconds"] += m.audio_duration
-            _save_metrics(data)
+            _save_metrics(user_id, data)
         except Exception as e:
             logger.debug(f"Error guardando métricas: {e}")
 
@@ -206,11 +233,16 @@ async def entrypoint(ctx: JobContext):
         # Fallback: extract from chat context if event-based capture missed messages
         if len(transcript) < 2:
             logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
-            for msg in session.chat_ctx.items:
-                if hasattr(msg, "role") and msg.role in ("user", "assistant"):
-                    text = msg.text_content if hasattr(msg, "text_content") else None
-                    if text:
-                        transcript.append({"role": msg.role, "text": text})
+            try:
+                chat_ctx = getattr(session, 'chat_ctx', None) or getattr(session, '_chat_ctx', None)
+                if chat_ctx and hasattr(chat_ctx, 'items'):
+                    for msg in chat_ctx.items:
+                        if hasattr(msg, "role") and msg.role in ("user", "assistant"):
+                            text = msg.text_content if hasattr(msg, "text_content") else None
+                            if text:
+                                transcript.append({"role": msg.role, "text": text})
+            except Exception as e:
+                logger.warning(f"No se pudo extraer chat_ctx: {e}")
 
         if len(transcript) < 2:
             logger.info("Sesión muy corta, no se guardan notas")

@@ -2,17 +2,19 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-CONVERSATIONS_DIR = Path(__file__).parent / "conversations"
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class ConversationLog:
-    """Saves conversation transcripts as .md files, organized by personality."""
+    """Saves conversation transcripts as .md files, organized by user and personality."""
 
-    def __init__(self, personality_key: str, personality_name: str):
+    def __init__(self, personality_key: str, personality_name: str, user_id: str = "default"):
         safe_key = re.sub(r'[^a-zA-Z0-9_-]', '', personality_key)
+        safe_user = re.sub(r'[^a-zA-Z0-9_-]', '', user_id)
         self.personality_key = safe_key or "unknown"
         self.personality_name = personality_name
-        self.log_dir = CONVERSATIONS_DIR / self.personality_key
+        self.user_id = safe_user or "default"
+        self.log_dir = DATA_DIR / self.user_id / "conversations" / self.personality_key
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def get_log_dir(self) -> Path:

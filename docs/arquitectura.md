@@ -73,7 +73,8 @@ Sistema de agentes conversacionales por voz en tiempo real, construido sobre Liv
 | **UI** | Tailwind CSS 4 + Radix UI + Tiptap | Editor Markdown para notas clinicas |
 | **Auth** | NextAuth.js v5 (beta) | CredentialsProvider, JWT sessions, middleware |
 | **STT** | Deepgram (nova-3) | Idioma: espanol |
-| **LLM** | Google Gemini 2.0 Flash | Via OpenRouter (`openrouter.ai/api/v1`) |
+| **LLM** | Google Gemini 2.0 Flash (configurable) | Via OpenRouter (`openrouter.ai/api/v1`), modelo cambiable por personalidad |
+| **LLM Analisis** | Claude Sonnet 4 | Via OpenRouter, para notas clinicas post-sesion (`ANALYSIS_MODEL`) |
 | **TTS** | Cartesia (sonic-3) | Idioma: espanol, 33 voces en espanol configurables |
 | **Transporte** | LiveKit Cloud | WebRTC para audio en tiempo real |
 | **Agent** | Python 3.12+ | `livekit-agents` 1.4.4 |

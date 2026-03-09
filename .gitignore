@@ -29,7 +29,11 @@ agent/sessions/
 agent/conversations/
 agent/agent.egg-info/
 
-# Auth
+# Multi-user data (sessions, conversations, metrics per user)
+data/
+users.json
+
+# Auth (legacy)
 auth-config.json
 
 # Claude

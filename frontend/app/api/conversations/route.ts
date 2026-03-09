@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { auth } from '@/lib/auth';
+import { getUserConversationsDir } from '@/lib/data-paths';
 import { rateLimit } from '@/lib/rate-limit';
-
-const CONVERSATIONS_BASE = join(process.cwd(), '..', 'agent', 'conversations');
 
 export const revalidate = 0;
 
@@ -25,13 +25,20 @@ export async function GET(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
-    if (!existsSync(CONVERSATIONS_BASE)) {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const conversationsBase = getUserConversationsDir(userId);
+
+    if (!existsSync(conversationsBase)) {
       return NextResponse.json({ personalities: [] });
     }
 
-    const dirs = readdirSync(CONVERSATIONS_BASE).filter((d) => {
+    const dirs = readdirSync(conversationsBase).filter((d) => {
       try {
-        const full = join(CONVERSATIONS_BASE, d);
+        const full = join(conversationsBase, d);
         return statSync(full).isDirectory();
       } catch {
         return false;
@@ -40,7 +47,7 @@ export async function GET(req: Request) {
 
     const personalities: PersonalityConversations[] = dirs
       .map((d) => {
-        const dirPath = join(CONVERSATIONS_BASE, d);
+        const dirPath = join(conversationsBase, d);
         const files = readdirSync(dirPath)
           .filter((f) => f.endsWith('.md'))
           .sort()

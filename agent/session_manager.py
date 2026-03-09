@@ -1,25 +1,36 @@
-import os
 import re
 import json
-import glob
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
 
-SESSIONS_DIR = Path(__file__).parent / "sessions"
+DATA_DIR = Path(__file__).parent.parent / "data"
+# Legacy fallback for backward compatibility
+LEGACY_SESSIONS_DIR = Path(__file__).parent / "sessions"
 
 
 class SessionManager:
-    """Manages patient session files and directories."""
+    """Manages patient session files and directories, scoped per user."""
 
-    def __init__(self, patient_id: str = "paciente_eduardo"):
+    def __init__(self, patient_id: str = "paciente_eduardo", user_id: str = "default"):
         safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', patient_id)
         if not safe_id:
             safe_id = "default"
+        safe_user = re.sub(r'[^a-zA-Z0-9_-]', '', user_id)
+        if not safe_user:
+            safe_user = "default"
+
         self.patient_id = safe_id
-        self.patient_dir = SESSIONS_DIR / safe_id
-        # Verify the resolved path stays within SESSIONS_DIR
-        if not self.patient_dir.resolve().is_relative_to(SESSIONS_DIR.resolve()):
+        self.user_id = safe_user
+
+        # User-scoped sessions directory: data/{user_id}/sessions/{patient_id}
+        self.sessions_base = DATA_DIR / safe_user / "sessions"
+        self.patient_dir = self.sessions_base / safe_id
+
+        # Verify the resolved path stays within the user's data dir
+        user_data_dir = DATA_DIR / safe_user
+        if not self.patient_dir.resolve().is_relative_to(user_data_dir.resolve()):
             raise ValueError(f"Invalid patient ID: {patient_id}")
+
         self.sesiones_dir = self.patient_dir / "sesiones"
         self.conclusiones_dir = self.patient_dir / "conclusiones"
         self._ensure_dirs()

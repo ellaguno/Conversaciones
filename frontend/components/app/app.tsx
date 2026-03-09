@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession as useAuthSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { TokenSource } from 'livekit-client';
 import { useSession } from '@livekit/components-react';
 import { WarningIcon } from '@phosphor-icons/react/dist/ssr';
@@ -45,6 +46,8 @@ function SessionInner({
   personalityConfig,
   onOpenSettings,
   onLogout,
+  onAdminPanel,
+  isAdmin,
   therapyMethod,
   coupleTherapy,
 }: {
@@ -59,6 +62,8 @@ function SessionInner({
   personalityConfig: PersonalityConfig;
   onOpenSettings: () => void;
   onLogout: () => void;
+  onAdminPanel?: () => void;
+  isAdmin: boolean;
   therapyMethod: string;
   coupleTherapy: boolean;
 }) {
@@ -112,6 +117,8 @@ function SessionInner({
           personalityConfig={personalityConfig}
           onOpenSettings={onOpenSettings}
           onLogout={onLogout}
+          onAdminPanel={onAdminPanel}
+          isAdmin={isAdmin}
         />
       </main>
       <StartAudioButton label="Start Audio" />
@@ -132,6 +139,9 @@ function SessionInner({
 }
 
 export function App({ appConfig }: AppProps) {
+  const { data: authSession } = useAuthSession();
+  const router = useRouter();
+  const isAdmin = (authSession?.user as { role?: string } | undefined)?.role === 'admin';
   const [selectedPersonality, setSelectedPersonality] = useState('trader');
   const [activePersonality, setActivePersonality] = useState('trader');
   const [activePatientId, setActivePatientId] = useState('');
@@ -198,6 +208,8 @@ export function App({ appConfig }: AppProps) {
       personalityConfig={activeConfig}
       onOpenSettings={() => setShowSettings(true)}
       onLogout={handleLogout}
+      onAdminPanel={() => router.push('/admin')}
+      isAdmin={isAdmin}
       therapyMethod={activeTherapyMethod}
       coupleTherapy={activeCoupleTherapy}
     />

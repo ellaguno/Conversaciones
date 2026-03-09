@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { existsSync, readFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
+import { auth } from '@/lib/auth';
+import { getUserConversationsDir } from '@/lib/data-paths';
 import { rateLimit } from '@/lib/rate-limit';
-
-const CONVERSATIONS_BASE = join(process.cwd(), '..', 'agent', 'conversations');
 
 function isValidFilename(f: string): boolean {
   return /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.md$/.test(f);
@@ -20,6 +20,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const conversationsBase = getUserConversationsDir(userId);
+
     const { filename } = await params;
     const personality = req.nextUrl.searchParams.get('personality') || '';
 
@@ -30,8 +37,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
       return NextResponse.json({ error: 'Invalid personality' }, { status: 400 });
     }
 
-    const filePath = resolve(CONVERSATIONS_BASE, personality, filename);
-    if (!filePath.startsWith(resolve(CONVERSATIONS_BASE))) {
+    const filePath = resolve(conversationsBase, personality, filename);
+    if (!filePath.startsWith(resolve(conversationsBase))) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
     }
 

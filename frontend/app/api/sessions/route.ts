@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, readdirSync, renameSync } from 'fs';
+import { join, resolve } from 'path';
+import { auth } from '@/lib/auth';
+import { getUserSessionsDir } from '@/lib/data-paths';
 import { rateLimit } from '@/lib/rate-limit';
-
-const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');
 
 export const revalidate = 0;
 
@@ -101,12 +101,20 @@ export async function GET(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
-    if (!existsSync(SESSIONS_BASE)) {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const sessionsBase = getUserSessionsDir(userId);
+
+    if (!existsSync(sessionsBase)) {
       return NextResponse.json({ patients: [] });
     }
 
-    const dirs = readdirSync(SESSIONS_BASE).filter((d) => {
-      const full = join(SESSIONS_BASE, d);
+    const dirs = readdirSync(sessionsBase).filter((d) => {
+      if (d.includes('_deleted_')) return false;
+      const full = join(sessionsBase, d);
       try {
         return readdirSync(full).length > 0;
       } catch {
@@ -114,11 +122,58 @@ export async function GET(req: Request) {
       }
     });
 
-    const patients = dirs.map((d) => readPatient(join(SESSIONS_BASE, d), d));
+    const patients = dirs.map((d) => readPatient(join(sessionsBase, d), d));
 
     return NextResponse.json({ patients });
   } catch (error) {
     console.error('Error reading sessions:', error);
     return NextResponse.json({ patients: [] });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`sessions-del:${ip}`, 10, 60_000)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const sessionsBase = getUserSessionsDir(userId);
+
+    const body = await req.json();
+    const rawPatientId = body?.patientId;
+    if (!rawPatientId || typeof rawPatientId !== 'string') {
+      return NextResponse.json({ error: 'patientId requerido' }, { status: 400 });
+    }
+
+    const safePatientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safePatientId) {
+      return NextResponse.json({ error: 'patientId invalido' }, { status: 400 });
+    }
+
+    const patientDir = join(sessionsBase, safePatientId);
+
+    // Verify path stays within user's sessions directory
+    if (!resolve(patientDir).startsWith(resolve(sessionsBase))) {
+      return NextResponse.json({ error: 'Ruta invalida' }, { status: 400 });
+    }
+
+    if (!existsSync(patientDir)) {
+      return NextResponse.json({ error: 'Paciente no encontrado' }, { status: 404 });
+    }
+
+    // Soft-delete: rename directory
+    const deletedDir = join(sessionsBase, `${safePatientId}_deleted_${Date.now()}`);
+    renameSync(patientDir, deletedDir);
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting patient:', error);
+    return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
   }
 }

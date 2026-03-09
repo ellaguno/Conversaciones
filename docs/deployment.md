@@ -11,6 +11,7 @@ LIVEKIT_API_SECRET=<livekit_api_secret>
 DEEPGRAM_API_KEY=<deepgram_api_key>
 OPENAI_API_KEY=<openrouter_api_key>   # Es la key de OpenRouter, no de OpenAI
 CARTESIA_API_KEY=<cartesia_api_key>
+ANALYSIS_MODEL=anthropic/claude-sonnet-4  # Modelo para analisis clinico (notas post-sesion)
 ```
 
 ### Frontend (`frontend/.env.local`)
@@ -151,9 +152,11 @@ En produccion:
 | [OpenRouter](https://openrouter.ai) | LLM Gateway | Pay-per-use |
 | [Cartesia](https://cartesia.ai) | Text-to-Speech | Si (limitado) |
 
-## Seguridad
+## Documentacion Adicional
 
-Ver **[seguridad.md](seguridad.md)** para el analisis completo de vulnerabilidades y las 7 capas de seguridad implementadas.
+- **[seguridad.md](seguridad.md)** — Analisis de vulnerabilidades y 7 capas de seguridad
+- **[guia-administrador.md](guia-administrador.md)** — Guia completa de instalacion, configuracion y mantenimiento
+- **[guia-usuario.md](guia-usuario.md)** — Guia de uso para usuarios finales
 
 ## Monitoreo
 

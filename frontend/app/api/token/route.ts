@@ -5,6 +5,7 @@ import {
   RoomServiceClient,
   type VideoGrant,
 } from 'livekit-server-sdk';
+import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
 type ConnectionDetails = {
@@ -42,6 +43,13 @@ export async function POST(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
+    // Get authenticated user
+    const session = await auth();
+    if (!session?.user?.id) {
+      return new NextResponse('No autenticado', { status: 401 });
+    }
+    const userId = session.user.id;
+
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
       throw new Error('LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET must be defined');
     }
@@ -67,9 +75,10 @@ export async function POST(req: Request) {
     // Create room with metadata via RoomService API
     const httpUrl = LIVEKIT_URL.replace('wss://', 'https://');
     const roomService = new RoomServiceClient(httpUrl, API_KEY, API_SECRET);
-    // Pack config into metadata as JSON
+    // Pack config into metadata as JSON — include userId for data isolation
     const metadata = JSON.stringify({
       personality,
+      userId,
       ...(voiceId && { voiceId }),
       ...(temperature !== null && { temperature }),
       ...(model && { model }),

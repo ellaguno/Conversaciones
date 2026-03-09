@@ -8,6 +8,7 @@ import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
 import { ConversationLogView } from '@/components/app/conversation-log-view';
 import { NotesView } from '@/components/app/notes-view';
+import { TranscribeView } from '@/components/app/transcribe-view';
 import { type TherapyOptions, WelcomeView } from '@/components/app/welcome-view';
 import type { PersonalityConfig } from '@/lib/personalities-config';
 import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
@@ -37,6 +38,8 @@ interface ViewControllerProps {
   personalityConfig: PersonalityConfig;
   onOpenSettings: () => void;
   onLogout: () => void;
+  onAdminPanel?: () => void;
+  isAdmin?: boolean;
 }
 
 export function ViewController({
@@ -50,12 +53,15 @@ export function ViewController({
   personalityConfig,
   onOpenSettings,
   onLogout,
+  onAdminPanel,
+  isAdmin,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
   const wasConnected = useRef(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showConversations, setShowConversations] = useState<string | null>(null);
+  const [showTranscribe, setShowTranscribe] = useState(false);
 
   // Detect disconnection to reset autoConnect (must run before auto-connect effect)
   useEffect(() => {
@@ -74,6 +80,11 @@ export function ViewController({
       start();
     }
   }, [autoConnect, isConnected, start]);
+
+  // Transcribe view
+  if (showTranscribe && !isConnected) {
+    return <TranscribeView onBack={() => setShowTranscribe(false)} />;
+  }
 
   // Notes view (Dra. Ana)
   if (showNotes && !isConnected) {
@@ -117,8 +128,11 @@ export function ViewController({
           onStartCall={onStartCall}
           onViewNotes={() => setShowNotes(true)}
           onViewConversations={(p: string) => setShowConversations(p)}
+          onTranscribe={() => setShowTranscribe(true)}
           onOpenSettings={onOpenSettings}
           onLogout={onLogout}
+          onAdminPanel={onAdminPanel}
+          isAdmin={isAdmin}
         />
       )}
       {isConnected && (

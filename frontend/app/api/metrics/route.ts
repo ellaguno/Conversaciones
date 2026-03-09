@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-
-const METRICS_FILE = join(process.cwd(), '..', 'agent', 'metrics.json');
+import { auth } from '@/lib/auth';
+import { getUserMetricsFile } from '@/lib/data-paths';
 
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    if (!existsSync(METRICS_FILE)) {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+    const metricsFile = getUserMetricsFile(userId);
+
+    if (!existsSync(metricsFile)) {
       return NextResponse.json({
         total_tokens: 0,
         prompt_tokens: 0,
@@ -19,7 +25,7 @@ export async function GET() {
         stt_audio_seconds: 0,
       });
     }
-    const data = JSON.parse(readFileSync(METRICS_FILE, 'utf-8'));
+    const data = JSON.parse(readFileSync(metricsFile, 'utf-8'));
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ total_tokens: 0, total_cost_usd: 0 });

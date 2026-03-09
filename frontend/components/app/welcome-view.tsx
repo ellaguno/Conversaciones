@@ -84,8 +84,11 @@ interface WelcomeViewProps {
   onStartCall: (personality: string, patientId?: string, therapy?: TherapyOptions) => void;
   onViewNotes?: () => void;
   onViewConversations?: (personality: string) => void;
+  onTranscribe?: () => void;
   onOpenSettings?: () => void;
   onLogout?: () => void;
+  onAdminPanel?: () => void;
+  isAdmin?: boolean;
 }
 
 export const WelcomeView = ({
@@ -95,8 +98,11 @@ export const WelcomeView = ({
   onStartCall,
   onViewNotes,
   onViewConversations,
+  onTranscribe,
   onOpenSettings,
   onLogout,
+  onAdminPanel,
+  isAdmin,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -392,14 +398,30 @@ export const WelcomeView = ({
           )}
         </div>
 
-        {/* Settings & logout links */}
+        {/* Settings, admin & logout links */}
         <div className="mt-4 flex items-center gap-4">
+          {onTranscribe && (
+            <button
+              onClick={onTranscribe}
+              className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+            >
+              Transcribir audio
+            </button>
+          )}
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}
               className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
             >
               Configuracion
+            </button>
+          )}
+          {isAdmin && onAdminPanel && (
+            <button
+              onClick={onAdminPanel}
+              className="text-muted-foreground text-xs underline transition-colors hover:text-amber-600 dark:hover:text-amber-400"
+            >
+              Usuarios
             </button>
           )}
           {onLogout && (

@@ -1,18 +1,21 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
-
-const SESSIONS_BASE = join(process.cwd(), '..', 'agent', 'sessions');
-
-function isPathSafe(filePath: string): boolean {
-  return resolve(filePath).startsWith(resolve(SESSIONS_BASE));
-}
+import { auth } from '@/lib/auth';
+import { getUserSessionsDir } from '@/lib/data-paths';
 
 function isValidSessionFilename(filename: string): boolean {
   return /^\d{4}-\d{2}-\d{2}_sesion_\d{3}\.md$/.test(filename);
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ filename: string }> }) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+  const userId = session.user.id;
+  const sessionsBase = getUserSessionsDir(userId);
+
   const { filename } = await params;
   const url = new URL(req.url);
   const patientId = url.searchParams.get('patientId');
@@ -23,9 +26,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
 
   // Sanitize patientId to prevent path traversal
   const safePatientId = patientId.replace(/[^a-zA-Z0-9_-]/g, '');
-  const filePath = join(SESSIONS_BASE, safePatientId, 'sesiones', filename);
+  const filePath = join(sessionsBase, safePatientId, 'sesiones', filename);
 
-  if (!isPathSafe(filePath)) {
+  if (!resolve(filePath).startsWith(resolve(sessionsBase))) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
