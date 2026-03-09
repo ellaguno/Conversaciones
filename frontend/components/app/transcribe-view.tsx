@@ -222,7 +222,14 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
                 className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
                 title="Volver"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
               </button>
@@ -263,11 +270,22 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
           <div className="mx-auto flex max-w-2xl items-center justify-between">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { setView('list'); setResult(null); setFile(null); }}
+                onClick={() => {
+                  setView('list');
+                  setResult(null);
+                  setFile(null);
+                }}
                 className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
                 title="Volver"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
               </button>
@@ -276,7 +294,9 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
                 <div className="text-muted-foreground flex items-center gap-2 font-mono text-[10px]">
                   <span>{result.durationFormatted}</span>
                   <span>·</span>
-                  <span>{result.speakers} {result.speakers === 1 ? 'hablante' : 'hablantes'}</span>
+                  <span>
+                    {result.speakers} {result.speakers === 1 ? 'hablante' : 'hablantes'}
+                  </span>
                   <span>·</span>
                   <span>${result.cost.toFixed(4)}</span>
                 </div>
@@ -334,7 +354,14 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
               className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
               title="Volver"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
@@ -346,7 +373,11 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
             </div>
           </div>
           <button
-            onClick={() => { setView('upload'); setFile(null); setError(''); }}
+            onClick={() => {
+              setView('upload');
+              setFile(null);
+              setError('');
+            }}
             className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-4 py-1.5 text-xs font-bold transition-colors"
           >
             Nueva transcripcion
@@ -418,7 +449,11 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => { setView('list'); setFile(null); setError(''); }}
+                  onClick={() => {
+                    setView('list');
+                    setFile(null);
+                    setError('');
+                  }}
                   className="rounded-full text-xs"
                 >
                   Cancelar
@@ -467,7 +502,14 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
                       className="text-muted-foreground hover:text-foreground rounded-lg p-1.5 transition-colors"
                       title="Descargar"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
@@ -477,7 +519,14 @@ export function TranscribeView({ onBack }: TranscribeViewProps) {
                       onClick={() => handleOpen(t.filename)}
                       className="text-muted-foreground transition-transform group-hover:translate-x-0.5"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M9 18l6-6-6-6" />
                       </svg>
                     </button>

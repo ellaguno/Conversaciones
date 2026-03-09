@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button';
 const PERSONALITIES = [
   {
     key: 'trader',
-    name: 'Carlos el Trader',
-    description: 'Experto en mercados financieros',
+    name: 'Trader',
+    description: 'Elige un mercado',
     emoji: '📈',
   },
   {
     key: 'abogado',
-    name: 'Lic. Martinez',
-    description: 'Abogado corporativo',
+    name: 'Abogado',
+    description: 'Elige una especialidad',
     emoji: '⚖️',
   },
   {
@@ -30,9 +30,9 @@ const PERSONALITIES = [
   },
   {
     key: 'normal',
-    name: 'Alguien Normal',
-    description: 'Una persona normal para platicar',
-    emoji: '👤',
+    name: 'Personaje Famoso',
+    description: 'Platica con alguien especial',
+    emoji: '🌟',
   },
   {
     key: 'espiritual',
@@ -41,6 +41,81 @@ const PERSONALITIES = [
     emoji: '🕊️',
   },
 ];
+
+const DEFAULT_FAMOUS_CHARACTERS = [
+  { key: 'normal', name: 'Alguien Normal' },
+  { key: 'tesla', name: 'Nikola Tesla' },
+  { key: 'jesus', name: 'Jesucristo' },
+  { key: 'aquino', name: 'Santo Tomas de Aquino' },
+  { key: 'francisco', name: 'San Francisco de Asis' },
+  { key: 'suntzu', name: 'Sun Tzu' },
+];
+
+const CUSTOM_KEY = '__other__';
+
+function loadCustomCharacters(): { key: string; name: string }[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem('customCharacters');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCharacters(chars: { key: string; name: string }[]) {
+  localStorage.setItem('customCharacters', JSON.stringify(chars));
+}
+
+const LAWYER_SPECIALTIES = [
+  { key: 'abogado', name: 'Abogado General' },
+  { key: 'abogado_corporativo', name: 'Corporativo / Mercantil' },
+  { key: 'abogado_laboral', name: 'Laboral' },
+  { key: 'abogado_fiscal', name: 'Fiscal / Tributario' },
+  { key: 'abogado_penal', name: 'Penal' },
+  { key: 'abogado_familiar', name: 'Familiar' },
+  { key: 'abogado_inmobiliario', name: 'Inmobiliario' },
+];
+
+const TRADER_MARKETS = [
+  { key: 'trader', name: 'Trader General' },
+  { key: 'trader_bolsa', name: 'Bolsa / Renta Variable' },
+  { key: 'trader_crypto', name: 'Criptomonedas' },
+  { key: 'trader_forex', name: 'Forex / Divisas' },
+  { key: 'trader_dinero', name: 'Finanzas Personales' },
+  { key: 'trader_commodities', name: 'Commodities / Materias Primas' },
+];
+
+const CUSTOM_LAWYER_KEY = '__other_lawyer__';
+const CUSTOM_TRADER_KEY = '__other_trader__';
+
+function loadCustomLawyers(): { key: string; name: string }[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem('customLawyers');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomLawyers(items: { key: string; name: string }[]) {
+  localStorage.setItem('customLawyers', JSON.stringify(items));
+}
+
+function loadCustomTraders(): { key: string; name: string }[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem('customTraders');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomTraders(items: { key: string; name: string }[]) {
+  localStorage.setItem('customTraders', JSON.stringify(items));
+}
 
 const SPIRITUAL_GUIDES = [
   { key: 'estoico', name: 'Filósofo Estoico' },
@@ -111,6 +186,21 @@ export const WelcomeView = ({
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
   const [selectedGuide, setSelectedGuide] = useState('estoico');
+  const [selectedFamous, setSelectedFamous] = useState('normal');
+  const [customCharacters, setCustomCharacters] = useState<{ key: string; name: string }[]>([]);
+  const [customName, setCustomName] = useState('');
+  const [selectedLawyer, setSelectedLawyer] = useState('abogado');
+  const [customLawyers, setCustomLawyers] = useState<{ key: string; name: string }[]>([]);
+  const [customLawyerName, setCustomLawyerName] = useState('');
+  const [selectedTrader, setSelectedTrader] = useState('trader');
+  const [customTraders, setCustomTraders] = useState<{ key: string; name: string }[]>([]);
+  const [customTraderName, setCustomTraderName] = useState('');
+
+  useEffect(() => {
+    setCustomCharacters(loadCustomCharacters());
+    setCustomLawyers(loadCustomLawyers());
+    setCustomTraders(loadCustomTraders());
+  }, []);
   const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
   const [therapyMethod, setTherapyMethod] = useState('cbt');
   const [coupleTherapy, setCoupleTherapy] = useState(false);
@@ -156,6 +246,9 @@ export const WelcomeView = ({
 
   const isPsicologo = selectedPersonality === 'psicologo';
   const isEspiritual = selectedPersonality === 'espiritual';
+  const isNormal = selectedPersonality === 'normal';
+  const isAbogado = selectedPersonality === 'abogado';
+  const isTrader = selectedPersonality === 'trader';
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',
     year: 'numeric',
@@ -198,6 +291,114 @@ export const WelcomeView = ({
             </button>
           ))}
         </div>
+
+        {/* Famous character selector */}
+        {isNormal && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedFamous}
+              onChange={(e) => {
+                setSelectedFamous(e.target.value);
+                if (e.target.value !== CUSTOM_KEY) setCustomName('');
+              }}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {DEFAULT_FAMOUS_CHARACTERS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              {customCharacters.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              <option value={CUSTOM_KEY}>Otro...</option>
+            </select>
+            {selectedFamous === CUSTOM_KEY && (
+              <input
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="Escribe el nombre del personaje"
+                autoFocus
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-2 w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Lawyer specialty selector */}
+        {isAbogado && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedLawyer}
+              onChange={(e) => {
+                setSelectedLawyer(e.target.value);
+                if (e.target.value !== CUSTOM_LAWYER_KEY) setCustomLawyerName('');
+              }}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {LAWYER_SPECIALTIES.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              {customLawyers.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              <option value={CUSTOM_LAWYER_KEY}>Otro...</option>
+            </select>
+            {selectedLawyer === CUSTOM_LAWYER_KEY && (
+              <input
+                type="text"
+                value={customLawyerName}
+                onChange={(e) => setCustomLawyerName(e.target.value)}
+                placeholder="Escribe la especialidad legal"
+                autoFocus
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-2 w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Trader market selector */}
+        {isTrader && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedTrader}
+              onChange={(e) => {
+                setSelectedTrader(e.target.value);
+                if (e.target.value !== CUSTOM_TRADER_KEY) setCustomTraderName('');
+              }}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {TRADER_MARKETS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              {customTraders.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              <option value={CUSTOM_TRADER_KEY}>Otro...</option>
+            </select>
+            {selectedTrader === CUSTOM_TRADER_KEY && (
+              <input
+                type="text"
+                value={customTraderName}
+                onChange={(e) => setCustomTraderName(e.target.value)}
+                placeholder="Escribe el tipo de mercado o tema"
+                autoFocus
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-2 w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+            )}
+          </div>
+        )}
 
         {/* Spiritual guide selector */}
         {isEspiritual && (
@@ -372,13 +573,98 @@ export const WelcomeView = ({
             <>
               <Button
                 size="lg"
-                onClick={() => onStartCall(isEspiritual ? selectedGuide : selectedPersonality)}
-                className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase"
+                onClick={() => {
+                  // Handle custom "Otro..." for Famous Characters
+                  if (isNormal && selectedFamous === CUSTOM_KEY) {
+                    const name = customName.trim();
+                    if (!name) return;
+                    const slug = name
+                      .toLowerCase()
+                      .replace(/\s+/g, '_')
+                      .replace(/[^a-z0-9_-]/g, '');
+                    const key = `custom_${slug}`;
+                    const exists = customCharacters.some((c) => c.key === key);
+                    if (!exists) {
+                      const updated = [...customCharacters, { key, name }];
+                      setCustomCharacters(updated);
+                      saveCustomCharacters(updated);
+                    }
+                    setSelectedFamous(key);
+                    setCustomName('');
+                    onStartCall(key);
+                    return;
+                  }
+                  // Handle custom "Otro..." for Lawyer
+                  if (isAbogado && selectedLawyer === CUSTOM_LAWYER_KEY) {
+                    const name = customLawyerName.trim();
+                    if (!name) return;
+                    const slug = name
+                      .toLowerCase()
+                      .replace(/\s+/g, '_')
+                      .replace(/[^a-z0-9_-]/g, '');
+                    const key = `custom_abogado_${slug}`;
+                    const exists = customLawyers.some((c) => c.key === key);
+                    if (!exists) {
+                      const updated = [...customLawyers, { key, name }];
+                      setCustomLawyers(updated);
+                      saveCustomLawyers(updated);
+                    }
+                    setSelectedLawyer(key);
+                    setCustomLawyerName('');
+                    onStartCall(key);
+                    return;
+                  }
+                  // Handle custom "Otro..." for Trader
+                  if (isTrader && selectedTrader === CUSTOM_TRADER_KEY) {
+                    const name = customTraderName.trim();
+                    if (!name) return;
+                    const slug = name
+                      .toLowerCase()
+                      .replace(/\s+/g, '_')
+                      .replace(/[^a-z0-9_-]/g, '');
+                    const key = `custom_trader_${slug}`;
+                    const exists = customTraders.some((c) => c.key === key);
+                    if (!exists) {
+                      const updated = [...customTraders, { key, name }];
+                      setCustomTraders(updated);
+                      saveCustomTraders(updated);
+                    }
+                    setSelectedTrader(key);
+                    setCustomTraderName('');
+                    onStartCall(key);
+                    return;
+                  }
+                  // Standard selection
+                  const effectiveKey = isEspiritual
+                    ? selectedGuide
+                    : isNormal
+                      ? selectedFamous
+                      : isAbogado
+                        ? selectedLawyer
+                        : isTrader
+                          ? selectedTrader
+                          : selectedPersonality;
+                  onStartCall(effectiveKey);
+                }}
+                disabled={
+                  (isNormal && selectedFamous === CUSTOM_KEY && !customName.trim()) ||
+                  (isAbogado && selectedLawyer === CUSTOM_LAWYER_KEY && !customLawyerName.trim()) ||
+                  (isTrader && selectedTrader === CUSTOM_TRADER_KEY && !customTraderName.trim())
+                }
+                className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase disabled:opacity-50"
               >
                 {startButtonText}
               </Button>
               {(() => {
-                const effectiveKey = isEspiritual ? selectedGuide : selectedPersonality;
+                const effectiveKey = isEspiritual
+                  ? selectedGuide
+                  : isNormal
+                    ? selectedFamous
+                    : isAbogado
+                      ? selectedLawyer
+                      : isTrader
+                        ? selectedTrader
+                        : selectedPersonality;
                 const count = conversationCounts[effectiveKey] || 0;
                 if (count > 0 && onViewConversations) {
                   return (

@@ -82,10 +82,23 @@ async def entrypoint(ctx: JobContext):
     if room_name.startswith("room_"):
         parts = room_name.split("_")
         if len(parts) >= 3:
-            if parts[1] in PERSONALITIES:
-                personality_key = parts[1]
+            # Check for custom_* personalities (room_custom_slug_random)
+            if parts[1] == "custom" and len(parts) >= 4:
+                # Reconstruct custom key: custom_{slug} (everything between "custom" and last part which is random)
+                personality_key = "_".join(parts[1:-1])
+                logger.info(f"Custom personality key: '{personality_key}'")
             else:
-                logger.warning(f"Personalidad desconocida solicitada: {parts[1]}")
+                # Try progressively longer keys: room_{a}_{b}_{c}_{random}
+                # Check "a_b_c", then "a_b", then "a" against known personalities
+                found = False
+                for i in range(len(parts) - 1, 1, -1):
+                    candidate = "_".join(parts[1:i])
+                    if candidate in PERSONALITIES:
+                        personality_key = candidate
+                        found = True
+                        break
+                if not found and parts[1] not in PERSONALITIES:
+                    logger.warning(f"Personalidad desconocida solicitada: {parts[1]}")
         if len(parts) >= 4 and parts[1] == "psicologo":
             # room_psicologo_{patient_id}_{random}
             raw_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
@@ -124,7 +137,28 @@ async def entrypoint(ctx: JobContext):
     user_id = re.sub(r'[^a-zA-Z0-9_-]', '', user_id) or "default"
     logger.info(f"User ID: '{user_id}'")
 
-    personality = PERSONALITIES[personality_key]
+    if personality_key in PERSONALITIES:
+        personality = PERSONALITIES[personality_key]
+    elif personality_key.startswith("custom_"):
+        # Dynamic custom personality — derive name from key
+        char_name = personality_key.replace("custom_", "").replace("_", " ").title()
+        personality = {
+            "name": char_name,
+            "system_prompt": (
+                f"Eres {char_name}. Responde como lo haría esta persona o personaje, "
+                f"con su personalidad, conocimientos, estilo y perspectiva característicos. "
+                f"Mantente en personaje en todo momento. Si eres un personaje histórico, "
+                f"habla desde tu época pero puedes opinar sobre temas modernos desde tu perspectiva. "
+                f"Si eres un personaje de ficción, mantén tu personalidad tal como se conoce. "
+                f"Sé auténtico, interesante y conversacional. "
+                f"Siempre respondes en español."
+            ),
+            "voice_id": "3a35daa1-ba81-451c-9b21-59332e9db2f3",
+            "description": f"Conversación con {char_name}",
+            "has_sessions": True,
+        }
+    else:
+        personality = PERSONALITIES[DEFAULT_PERSONALITY]
     logger.info(f"Iniciando agente: {personality['name']} (key={personality_key})")
 
     # Build instructions and tools

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { auth } from '@/lib/auth';
 import { getUserDataDir } from '@/lib/data-paths';
@@ -17,7 +17,10 @@ export async function POST(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     if (!rateLimit(`transcribe:${ip}`, 5, 60_000)) {
-      return NextResponse.json({ error: 'Demasiadas solicitudes. Intenta en un minuto.' }, { status: 429 });
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta en un minuto.' },
+        { status: 429 }
+      );
     }
 
     const session = await auth();
@@ -86,7 +89,9 @@ export async function POST(req: Request) {
 
     if (durationMinutes > MAX_DURATION_MINUTES) {
       return NextResponse.json(
-        { error: `Audio excede el limite de ${MAX_DURATION_MINUTES} minutos (${durationMinutes.toFixed(1)} min)` },
+        {
+          error: `Audio excede el limite de ${MAX_DURATION_MINUTES} minutos (${durationMinutes.toFixed(1)} min)`,
+        },
         { status: 400 }
       );
     }

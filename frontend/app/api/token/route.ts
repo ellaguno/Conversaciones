@@ -21,10 +21,26 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL!;
 
 const VALID_PERSONALITIES = new Set([
   'trader',
+  'trader_bolsa',
+  'trader_crypto',
+  'trader_forex',
+  'trader_dinero',
+  'trader_commodities',
   'abogado',
+  'abogado_corporativo',
+  'abogado_laboral',
+  'abogado_fiscal',
+  'abogado_penal',
+  'abogado_familiar',
+  'abogado_inmobiliario',
   'psicologo',
   'hippy',
   'normal',
+  'tesla',
+  'jesus',
+  'aquino',
+  'francisco',
+  'suntzu',
   'estoico',
   'sacerdote',
   'monje',
@@ -56,7 +72,11 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const rawPersonality = body?.personality || 'trader';
-    const personality = VALID_PERSONALITIES.has(rawPersonality) ? rawPersonality : 'trader';
+    // Accept known personalities or custom_* keys
+    const isCustom =
+      typeof rawPersonality === 'string' && /^custom_[a-z0-9_-]+$/.test(rawPersonality);
+    const personality =
+      VALID_PERSONALITIES.has(rawPersonality) || isCustom ? rawPersonality : 'trader';
     const rawPatientId = body?.patientId || '';
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
     const voiceId = body?.voiceId || '';
