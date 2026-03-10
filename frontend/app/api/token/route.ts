@@ -47,6 +47,10 @@ const VALID_PERSONALITIES = new Set([
   'imam',
   'rabino',
   'pandit',
+  'asesor_sistemas',
+  'asesor_office',
+  'asesor_web',
+  'asesor_tecnico',
 ]);
 
 export const revalidate = 0;

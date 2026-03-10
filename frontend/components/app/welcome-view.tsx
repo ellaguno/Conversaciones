@@ -23,10 +23,10 @@ const PERSONALITIES = [
     emoji: '🧠',
   },
   {
-    key: 'hippy',
-    name: 'Paz',
-    description: 'Sabio alternativo',
-    emoji: '☮️',
+    key: 'asesor',
+    name: 'Asesor de Sistemas',
+    description: 'Ve tu pantalla y te guía',
+    emoji: '🖥️',
   },
   {
     key: 'normal',
@@ -117,7 +117,15 @@ function saveCustomTraders(items: { key: string; name: string }[]) {
   localStorage.setItem('customTraders', JSON.stringify(items));
 }
 
+const SYSTEM_ADVISORS = [
+  { key: 'asesor_sistemas', name: 'General (Windows/Mac/Linux)' },
+  { key: 'asesor_office', name: 'Office / Google Workspace' },
+  { key: 'asesor_web', name: 'Web / Navegadores / Email' },
+  { key: 'asesor_tecnico', name: 'Técnico Avanzado' },
+];
+
 const SPIRITUAL_GUIDES = [
+  { key: 'hippy', name: 'Paz - Sabio Alternativo' },
   { key: 'estoico', name: 'Filósofo Estoico' },
   { key: 'sacerdote', name: 'Sacerdote Católico' },
   { key: 'monje', name: 'Monje Budista' },
@@ -185,7 +193,8 @@ export const WelcomeView = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
-  const [selectedGuide, setSelectedGuide] = useState('estoico');
+  const [selectedAdvisor, setSelectedAdvisor] = useState('asesor_sistemas');
+  const [selectedGuide, setSelectedGuide] = useState('hippy');
   const [selectedFamous, setSelectedFamous] = useState('normal');
   const [customCharacters, setCustomCharacters] = useState<{ key: string; name: string }[]>([]);
   const [customName, setCustomName] = useState('');
@@ -249,6 +258,7 @@ export const WelcomeView = ({
   const isNormal = selectedPersonality === 'normal';
   const isAbogado = selectedPersonality === 'abogado';
   const isTrader = selectedPersonality === 'trader';
+  const isAsesor = selectedPersonality === 'asesor';
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',
     year: 'numeric',
@@ -397,6 +407,26 @@ export const WelcomeView = ({
                 className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-2 w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
               />
             )}
+          </div>
+        )}
+
+        {/* System advisor selector */}
+        {isAsesor && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedAdvisor}
+              onChange={(e) => setSelectedAdvisor(e.target.value)}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {SYSTEM_ADVISORS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-muted-foreground mt-2 text-center text-[11px]">
+              Comparte tu pantalla durante la llamada para que el asesor te guíe visualmente
+            </p>
           </div>
         )}
 
@@ -643,7 +673,9 @@ export const WelcomeView = ({
                         ? selectedLawyer
                         : isTrader
                           ? selectedTrader
-                          : selectedPersonality;
+                          : isAsesor
+                            ? selectedAdvisor
+                            : selectedPersonality;
                   onStartCall(effectiveKey);
                 }}
                 disabled={
@@ -664,7 +696,9 @@ export const WelcomeView = ({
                       ? selectedLawyer
                       : isTrader
                         ? selectedTrader
-                        : selectedPersonality;
+                        : isAsesor
+                          ? selectedAdvisor
+                          : selectedPersonality;
                 const count = conversationCounts[effectiveKey] || 0;
                 if (count > 0 && onViewConversations) {
                   return (

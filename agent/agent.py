@@ -8,10 +8,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from livekit import api
-from livekit.agents import Agent, AgentSession, JobContext, AgentServer, cli
+from livekit.agents import Agent, AgentSession, RoomInputOptions, JobContext, AgentServer, cli
+from livekit.agents.llm import ChatContext, ChatMessage, ImageContent
 from livekit.plugins import deepgram, openai, cartesia
 from personalities import (
-    PERSONALITIES, DEFAULT_PERSONALITY,
+    PERSONALITIES, DEFAULT_PERSONALITY, VISION_PERSONALITIES,
     DRA_ANA_INTAKE_PROMPT, DRA_ANA_FOLLOWUP_PROMPT,
     THERAPY_METHODS, DEFAULT_THERAPY_METHOD, DRA_ANA_COUPLE_ADDON,
 )
@@ -55,13 +56,31 @@ def _save_metrics(user_id: str, m: dict):
 
 
 class ComercianteAgent(Agent):
-    def __init__(self, personality_key: str, instructions: str, tools=None) -> None:
+    def __init__(self, personality_key: str, instructions: str, tools=None, has_vision: bool = False) -> None:
         personality = PERSONALITIES.get(personality_key, PERSONALITIES[DEFAULT_PERSONALITY])
-        logger.info(f"Cargando personalidad: {personality['name']}")
+        logger.info(f"Cargando personalidad: {personality['name']} (vision={has_vision})")
+        self._has_vision = has_vision
         super().__init__(
             instructions=instructions,
             tools=tools or [],
         )
+
+    async def on_user_turn_completed(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
+        """Inject the latest screen frame into the chat context before LLM processes it."""
+        if not self._has_vision:
+            return
+        try:
+            video_frame = self.session.input.video
+            if video_frame is not None:
+                turn_ctx.add_message(
+                    role="user",
+                    content=[ImageContent(image=video_frame)],
+                )
+                logger.info("Frame de pantalla inyectado al contexto del LLM")
+            else:
+                logger.info("Visión activa pero no hay frame de video disponible (¿pantalla no compartida?)")
+        except Exception as e:
+            logger.warning(f"Error capturando frame de video: {e}")
 
 
 server = AgentServer()
@@ -292,8 +311,15 @@ async def entrypoint(ctx: JobContext):
         if manager is not None:
             asyncio.ensure_future(_generate_notes(manager, transcript, start_time))
 
-    agent = ComercianteAgent(personality_key, instructions, tools)
-    await session.start(agent=agent, room=ctx.room)
+    has_vision = personality.get("has_vision", False) or personality_key in VISION_PERSONALITIES
+    agent = ComercianteAgent(personality_key, instructions, tools, has_vision=has_vision)
+
+    start_kwargs = {"agent": agent, "room": ctx.room}
+    if has_vision:
+        start_kwargs["room_input_options"] = RoomInputOptions(video_enabled=True)
+        logger.info("Visión habilitada: el agente puede ver la pantalla del usuario")
+
+    await session.start(**start_kwargs)
 
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):
