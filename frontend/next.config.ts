@@ -1,6 +1,13 @@
 import type { NextConfig } from 'next';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const version = readFileSync(join(__dirname, '..', 'VERSION'), 'utf-8').trim();
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: version,
+  },
   async headers() {
     return [
       {

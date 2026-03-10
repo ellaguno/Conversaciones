@@ -805,6 +805,9 @@ export const WelcomeView = ({
             </button>
           )}
         </div>
+        <span className="text-muted-foreground mt-4 text-[10px]">
+          v{process.env.NEXT_PUBLIC_APP_VERSION}
+        </span>
       </section>
     </div>
   );
