@@ -235,7 +235,7 @@ export const WelcomeView = ({
     setCustomTraders(loadCustomTraders());
   }, []);
   const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
-  const [therapyMethod, setTherapyMethod] = useState('cbt');
+  const [therapyMethod, setTherapyMethod] = useState('mindfulness');
   const [coupleTherapy, setCoupleTherapy] = useState(false);
 
   useEffect(() => {
