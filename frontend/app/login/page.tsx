@@ -68,7 +68,7 @@ export default function LoginPage() {
           {loading ? 'Entrando...' : 'Entrar'}
         </Button>
       </form>
-      <span className="text-muted-foreground absolute bottom-3 right-4 text-[10px]">
+      <span className="text-muted-foreground absolute right-4 bottom-3 text-[10px]">
         v{process.env.NEXT_PUBLIC_APP_VERSION}
       </span>
     </div>
