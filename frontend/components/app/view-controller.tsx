@@ -59,14 +59,12 @@ export function ViewController({
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
   const wasConnected = useRef(false);
+  const hasAutoStarted = useRef(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showConversations, setShowConversations] = useState<string | null>(null);
   const [showTranscribe, setShowTranscribe] = useState(false);
 
-  // Detect disconnection to reset autoConnect (must run before auto-connect effect)
-  // NOTE: Do NOT reset wasConnected.current here. Keeping it true prevents the
-  // auto-connect effect from firing before the async setAutoConnect(false) lands.
-  // The ref resets naturally when SessionInner remounts with a new key={sessionId}.
+  // Detect disconnection to reset autoConnect
   useEffect(() => {
     if (isConnected) {
       wasConnected.current = true;
@@ -75,10 +73,13 @@ export function ViewController({
     }
   }, [isConnected, onDisconnected]);
 
-  // Auto-connect when remounted after personality change
-  // Skip if wasConnected was true — that means user intentionally disconnected
+  // Auto-connect ONCE when component mounts with autoConnect=true.
+  // hasAutoStarted ensures start() is never called more than once per mount,
+  // preventing reconnection after user clicks "Finalizar".
+  // SessionInner remounts (new key={sessionId}) for each new call, resetting this ref.
   useEffect(() => {
-    if (autoConnect && !isConnected && !wasConnected.current) {
+    if (autoConnect && !isConnected && !hasAutoStarted.current) {
+      hasAutoStarted.current = true;
       start();
     }
   }, [autoConnect, isConnected, start]);
