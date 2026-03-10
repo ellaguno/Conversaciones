@@ -12,7 +12,7 @@ FAST_MODEL = "google/gemini-2.0-flash-001"
 
 # Analysis model (intelligent, slower) — used for clinical notes, plans, profiles
 # Claude Sonnet 4.6 via OpenRouter for superior analysis quality
-ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "anthropic/claude-sonnet-4")
+ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "anthropic/claude-opus-4.6")
 
 _client = None
 

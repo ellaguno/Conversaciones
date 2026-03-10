@@ -14,7 +14,10 @@ import type { PersonalityConfig } from '@/lib/personalities-config';
 import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
 
 const VISION_PERSONALITIES = new Set([
-  'asesor_sistemas', 'asesor_office', 'asesor_web', 'asesor_tecnico',
+  'asesor_sistemas',
+  'asesor_office',
+  'asesor_web',
+  'asesor_tecnico',
 ]);
 
 const MotionWelcomeView = motion.create(WelcomeView);
@@ -149,7 +152,9 @@ export function ViewController({
           personality={activePersonality}
           supportsChatInput={appConfig.supportsChatInput}
           supportsVideoInput={appConfig.supportsVideoInput}
-          supportsScreenShare={appConfig.supportsScreenShare || VISION_PERSONALITIES.has(activePersonality)}
+          supportsScreenShare={
+            appConfig.supportsScreenShare || VISION_PERSONALITIES.has(activePersonality)
+          }
           isPreConnectBufferEnabled={appConfig.isPreConnectBufferEnabled}
           audioVisualizerType={personalityConfig.visualizer || appConfig.audioVisualizerType}
           audioVisualizerColor={

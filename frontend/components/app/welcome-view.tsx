@@ -155,6 +155,30 @@ interface PatientInfo {
   sessionsCount: number;
 }
 
+function useGeneratingStatus() {
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const check = () => {
+      fetch('/api/sessions/generating')
+        .then((r) => r.json())
+        .then((data) => {
+          if (active) setGenerating(data.generating === true);
+        })
+        .catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 4000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  return generating;
+}
+
 export interface TherapyOptions {
   therapyMethod?: string;
   coupleTherapy?: boolean;
@@ -253,6 +277,7 @@ export const WelcomeView = ({
     }
   }, [selectedPersonality, selectedPatientId]);
 
+  const isGenerating = useGeneratingStatus();
   const isPsicologo = selectedPersonality === 'psicologo';
   const isEspiritual = selectedPersonality === 'espiritual';
   const isNormal = selectedPersonality === 'normal';
@@ -279,6 +304,33 @@ export const WelcomeView = ({
             <span>${metrics.total_cost_usd.toFixed(4)} USD</span>
             <span className="text-border">|</span>
             <span>{metrics.llm_calls} llamadas</span>
+          </div>
+        )}
+
+        {isGenerating && (
+          <div className="mb-4 flex w-full max-w-md items-center justify-center gap-2.5 rounded-xl border-2 border-purple-300 bg-purple-50 px-4 py-3 dark:border-purple-700 dark:bg-purple-950/30">
+            <svg
+              className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+              Generando notas de sesion...
+            </span>
           </div>
         )}
 

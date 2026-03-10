@@ -7,6 +7,10 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Load env BEFORE local imports that read env vars at module level (e.g. note_generator)
+load_dotenv(dotenv_path=".env.local")
+
 from livekit import api
 from livekit.agents import Agent, AgentSession, RoomInputOptions, JobContext, AgentServer, cli
 from livekit.agents.llm import ChatContext, ChatMessage, ImageContent
@@ -20,8 +24,6 @@ from session_manager import SessionManager
 from conversation_log import ConversationLog
 from therapy_tools import create_therapy_tools
 from note_generator import generate_session_notes, generate_intake_notes
-
-load_dotenv(dotenv_path=".env.local")
 
 logger = logging.getLogger("comerciante-con-voz")
 logger.setLevel(logging.INFO)
@@ -282,7 +284,7 @@ async def entrypoint(ctx: JobContext):
                 logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
 
     @session.on("close")
-    def on_close(event):
+    async def on_close(event):
         # Fallback: extract from chat context if event-based capture missed messages
         if len(transcript) < 2:
             logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
@@ -308,8 +310,9 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"Conversación guardada: {conv_log.get_log_dir()}")
 
         # Generate therapy notes only for Dra. Ana
+        # await keeps the process alive until notes are fully generated
         if manager is not None:
-            asyncio.ensure_future(_generate_notes(manager, transcript, start_time))
+            await _generate_notes(manager, transcript, start_time)
 
     has_vision = personality.get("has_vision", False) or personality_key in VISION_PERSONALITIES
     agent = ComercianteAgent(personality_key, instructions, tools, has_vision=has_vision)
@@ -324,7 +327,10 @@ async def entrypoint(ctx: JobContext):
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):
     """Generate notes after session ends."""
+    status_file = manager.patient_dir / ".generating"
     try:
+        status_file.write_text(datetime.now().isoformat(), encoding="utf-8")
+        logger.info("Iniciando generación de notas...")
         session_num = manager.get_session_number()
         if manager.is_first_session():
             await generate_intake_notes(manager, transcript, start_time)
@@ -333,6 +339,8 @@ async def _generate_notes(manager: SessionManager, transcript: list, start_time:
         logger.info("Notas generadas exitosamente")
     except Exception as e:
         logger.error(f"Error generando notas: {e}", exc_info=True)
+    finally:
+        status_file.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
