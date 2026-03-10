@@ -64,11 +64,13 @@ export function ViewController({
   const [showTranscribe, setShowTranscribe] = useState(false);
 
   // Detect disconnection to reset autoConnect (must run before auto-connect effect)
+  // NOTE: Do NOT reset wasConnected.current here. Keeping it true prevents the
+  // auto-connect effect from firing before the async setAutoConnect(false) lands.
+  // The ref resets naturally when SessionInner remounts with a new key={sessionId}.
   useEffect(() => {
     if (isConnected) {
       wasConnected.current = true;
     } else if (wasConnected.current) {
-      wasConnected.current = false;
       onDisconnected?.();
     }
   }, [isConnected, onDisconnected]);
