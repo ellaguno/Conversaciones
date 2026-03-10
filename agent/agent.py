@@ -283,8 +283,11 @@ async def entrypoint(ctx: JobContext):
                 transcript.append({"role": item.role, "text": text})
                 logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
 
+    notes_done = asyncio.Event()
+    notes_done.set()  # Default: no notes needed
+
     @session.on("close")
-    async def on_close(event):
+    def on_close(event):
         # Fallback: extract from chat context if event-based capture missed messages
         if len(transcript) < 2:
             logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
@@ -310,9 +313,11 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"Conversación guardada: {conv_log.get_log_dir()}")
 
         # Generate therapy notes only for Dra. Ana
-        # await keeps the process alive until notes are fully generated
         if manager is not None:
-            await _generate_notes(manager, transcript, start_time)
+            notes_done.clear()
+            asyncio.create_task(_generate_notes_and_signal(
+                notes_done, manager, transcript, start_time
+            ))
 
     has_vision = personality.get("has_vision", False) or personality_key in VISION_PERSONALITIES
     agent = ComercianteAgent(personality_key, instructions, tools, has_vision=has_vision)
@@ -323,6 +328,19 @@ async def entrypoint(ctx: JobContext):
         logger.info("Visión habilitada: el agente puede ver la pantalla del usuario")
 
     await session.start(**start_kwargs)
+
+    # Keep process alive until notes finish generating
+    await notes_done.wait()
+
+
+async def _generate_notes_and_signal(
+    done_event: asyncio.Event, manager: SessionManager, transcript: list, start_time: datetime
+):
+    """Wrapper that signals completion so the process can exit."""
+    try:
+        await _generate_notes(manager, transcript, start_time)
+    finally:
+        done_event.set()
 
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):
