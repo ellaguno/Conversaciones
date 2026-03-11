@@ -11,7 +11,27 @@ interface UserPublic {
   displayName: string;
   role: 'admin' | 'user';
   createdAt: string;
+  email?: string;
+  status?: 'active' | 'pending' | 'rejected';
+  lastActive?: string;
 }
+
+function formatRelativeTime(isoDate?: string): string {
+  if (!isoDate) return 'Nunca';
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return 'Justo ahora';
+  if (diffMin < 60) return `Hace ${diffMin}m`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `Hace ${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `Hace ${diffDays}d`;
+  return date.toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+
+type FilterTab = 'all' | 'pending' | 'active';
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -19,12 +39,14 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserPublic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState<FilterTab>('all');
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<'user' | 'admin'>('user');
   const [creating, setCreating] = useState(false);
 
@@ -34,6 +56,9 @@ export default function AdminPage() {
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
   const [saving, setSaving] = useState(false);
+
+  // Approve/reject loading
+  const [approving, setApproving] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -72,6 +97,7 @@ export default function AdminPage() {
           password: newPassword,
           displayName: newDisplayName,
           role: newRole,
+          email: newEmail || undefined,
         }),
       });
       const data = await res.json();
@@ -82,6 +108,7 @@ export default function AdminPage() {
         setNewUsername('');
         setNewPassword('');
         setNewDisplayName('');
+        setNewEmail('');
         setNewRole('user');
         fetchUsers();
       }
@@ -147,6 +174,27 @@ export default function AdminPage() {
     }
   };
 
+  const handleApprove = async (userId: string, action: 'approve' | 'reject') => {
+    setApproving(userId);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/users/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Error');
+      } else {
+        fetchUsers();
+      }
+    } catch {
+      setError('Error de conexion');
+    }
+    setApproving(null);
+  };
+
   if (status === 'loading' || loading) {
     return (
       <div className="bg-background flex min-h-svh items-center justify-center">
@@ -154,6 +202,14 @@ export default function AdminPage() {
       </div>
     );
   }
+
+  const pendingUsers = users.filter((u) => u.status === 'pending');
+  const filteredUsers =
+    filter === 'pending'
+      ? pendingUsers
+      : filter === 'active'
+        ? users.filter((u) => (u.status || 'active') === 'active')
+        : users;
 
   return (
     <div className="bg-background flex min-h-svh flex-col items-center px-4 py-8">
@@ -176,6 +232,68 @@ export default function AdminPage() {
           </p>
         )}
 
+        {/* Pending users alert */}
+        {pendingUsers.length > 0 && (
+          <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/30">
+            <h2 className="text-foreground mb-3 text-sm font-bold">
+              Solicitudes pendientes ({pendingUsers.length})
+            </h2>
+            <div className="space-y-2">
+              {pendingUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="border-border bg-background flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="text-foreground text-sm font-medium">{user.displayName}</p>
+                    <p className="text-muted-foreground text-xs">
+                      @{user.username} {user.email && `· ${user.email}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleApprove(user.id, 'approve')}
+                      disabled={approving === user.id}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {approving === user.id ? '...' : 'Aprobar'}
+                    </button>
+                    <button
+                      onClick={() => handleApprove(user.id, 'reject')}
+                      disabled={approving === user.id}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Filter tabs */}
+        <div className="mb-4 flex gap-1.5">
+          {(['all', 'active', 'pending'] as FilterTab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFilter(tab)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                filter === tab
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab === 'all' ? 'Todos' : tab === 'active' ? 'Activos' : 'Pendientes'}
+              {tab === 'pending' && pendingUsers.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {pendingUsers.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Users table */}
         <div className="border-border bg-card overflow-hidden rounded-xl border">
           <table className="w-full">
@@ -190,13 +308,19 @@ export default function AdminPage() {
                 <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
                   Rol
                 </th>
+                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
+                  Estado
+                </th>
+                <th className="text-muted-foreground hidden px-4 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
+                  Ultimo uso
+                </th>
                 <th className="text-muted-foreground px-4 py-3 text-right text-xs font-semibold uppercase">
                   Acciones
                 </th>
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user.id} className="border-border border-b last:border-0">
                   {editingId === user.id ? (
                     <>
@@ -230,6 +354,8 @@ export default function AdminPage() {
                           <option value="admin">Admin</option>
                         </select>
                       </td>
+                      <td className="px-4 py-3" />
+                      <td className="hidden px-4 py-3 sm:table-cell" />
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
                           <button
@@ -252,6 +378,9 @@ export default function AdminPage() {
                     <>
                       <td className="px-4 py-3">
                         <span className="text-foreground font-mono text-sm">{user.username}</span>
+                        {user.email && (
+                          <p className="text-muted-foreground text-[10px]">{user.email}</p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-foreground text-sm">{user.displayName}</span>
@@ -267,8 +396,46 @@ export default function AdminPage() {
                           {user.role}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            (user.status || 'active') === 'active'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : (user.status || 'active') === 'pending'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          }`}
+                        >
+                          {(user.status || 'active') === 'active'
+                            ? 'Activo'
+                            : user.status === 'pending'
+                              ? 'Pendiente'
+                              : 'Rechazado'}
+                        </span>
+                      </td>
+                      <td className="hidden px-4 py-3 sm:table-cell">
+                        <span className="text-muted-foreground text-xs">
+                          {formatRelativeTime(user.lastActive)}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
+                          {user.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(user.id, 'approve')}
+                                className="rounded bg-green-600 px-2 py-1 text-xs font-bold text-white hover:bg-green-700"
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => handleApprove(user.id, 'reject')}
+                                className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                              >
+                                Rechazar
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleEdit(user)}
                             className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs transition-colors"
@@ -308,6 +475,13 @@ export default function AdminPage() {
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
                 placeholder="Nombre para mostrar"
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
+              />
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="Correo electronico (opcional)"
                 className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
               />
               <input

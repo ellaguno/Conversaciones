@@ -1,6 +1,8 @@
+import json
 import os
 import logging
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from openai import AsyncOpenAI
 
 from session_manager import SessionManager
@@ -11,8 +13,21 @@ logger = logging.getLogger("comerciante-con-voz")
 FAST_MODEL = "google/gemini-2.0-flash-001"
 
 # Analysis model (intelligent, slower) — used for clinical notes, plans, profiles
-# Claude Sonnet 4.6 via OpenRouter for superior analysis quality
-ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "anthropic/claude-opus-4.6")
+# Read from settings.json first, then env var, then default
+def _get_analysis_model() -> str:
+    try:
+        settings_file = Path(__file__).parent.parent / "settings.json"
+        if settings_file.exists():
+            with open(settings_file) as f:
+                settings = json.load(f)
+            model = settings.get("analysisModel", "")
+            if model:
+                return model
+    except Exception:
+        pass
+    return os.getenv("ANALYSIS_MODEL", "anthropic/claude-opus-4.6")
+
+ANALYSIS_MODEL = _get_analysis_model()
 
 _client = None
 

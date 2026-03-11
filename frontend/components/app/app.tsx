@@ -188,6 +188,7 @@ export function App({ appConfig }: AppProps) {
         configs={configs}
         onSave={handleSaveConfigs}
         onBack={() => setShowSettings(false)}
+        isAdmin={isAdmin}
       />
     );
   }

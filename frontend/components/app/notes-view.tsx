@@ -196,9 +196,41 @@ function ConfirmDialog({
 }
 
 // --- Action buttons for view mode ---
-function NoteActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+function NoteActions({
+  onEdit,
+  onDelete,
+  onEmailTranscript,
+  onEmailHomework,
+  emailLoading,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+  onEmailTranscript?: () => void;
+  onEmailHomework?: () => void;
+  emailLoading?: boolean;
+}) {
   return (
     <div className="flex gap-1.5">
+      {onEmailTranscript && (
+        <button
+          onClick={onEmailTranscript}
+          disabled={emailLoading}
+          className="border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+          title="Enviar notas por correo"
+        >
+          {emailLoading ? '...' : '📧 Enviar'}
+        </button>
+      )}
+      {onEmailHomework && (
+        <button
+          onClick={onEmailHomework}
+          disabled={emailLoading}
+          className="rounded-lg border border-green-200 px-3 py-1.5 text-xs font-medium text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:border-green-900 dark:hover:bg-green-950/30"
+          title="Enviar tareas por correo"
+        >
+          {emailLoading ? '...' : '📋 Tareas'}
+        </button>
+      )}
       <button
         onClick={onEdit}
         className="border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
@@ -239,7 +271,41 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
   const [loading, setLoading] = useState(true);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ text: string; error: boolean } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleSendEmail = async (type: 'transcript' | 'homework', recipientEmail?: string) => {
+    if (!selectedPatient || !viewingSession) return;
+    setEmailLoading(true);
+    setEmailMsg(null);
+    try {
+      const res = await fetch('/api/sessions/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: selectedPatient.id,
+          sessionFilename: viewingSession,
+          type,
+          ...(recipientEmail && { recipientEmail }),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEmailMsg({
+          text: type === 'homework' ? 'Tareas enviadas por correo' : 'Notas enviadas por correo',
+          error: false,
+        });
+      } else {
+        setEmailMsg({ text: data.error || 'Error al enviar', error: true });
+      }
+    } catch {
+      setEmailMsg({ text: 'Error de conexion', error: true });
+    }
+    setEmailLoading(false);
+    // Auto-clear message after 4s
+    setTimeout(() => setEmailMsg(null), 4000);
+  };
 
   const fetchData = useCallback(() => {
     fetch('/api/sessions')
@@ -612,8 +678,25 @@ export function NotesView({ onBack, onStartSession }: NotesViewProps) {
             <ChevronLeft size={14} />
             Volver a sesiones
           </button>
-          <NoteActions onEdit={handleStartEdit} onDelete={handleRequestDelete} />
+          <NoteActions
+            onEdit={handleStartEdit}
+            onDelete={handleRequestDelete}
+            onEmailTranscript={() => handleSendEmail('transcript')}
+            onEmailHomework={() => handleSendEmail('homework')}
+            emailLoading={emailLoading}
+          />
         </div>
+        {emailMsg && (
+          <p
+            className={`mb-3 rounded-lg p-2 text-center text-xs ${
+              emailMsg.error
+                ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                : 'bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400'
+            }`}
+          >
+            {emailMsg.text}
+          </p>
+        )}
         <MarkdownContent content={sessionContent} />
       </div>
     );

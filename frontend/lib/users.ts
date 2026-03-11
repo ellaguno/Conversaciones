@@ -13,6 +13,10 @@ export interface UserRecord {
   displayName: string;
   role: 'admin' | 'user';
   createdAt: string;
+  email?: string;
+  status?: 'active' | 'pending' | 'rejected';
+  googleId?: string;
+  lastActive?: string;
 }
 
 export type UserPublic = Omit<UserRecord, 'passwordHash'>;
@@ -59,6 +63,7 @@ export function initUsersIfNeeded(): void {
     displayName: 'Administrador',
     role: 'admin',
     createdAt: new Date().toISOString(),
+    status: 'active',
   };
 
   writeUsers([adminUser]);
@@ -66,7 +71,6 @@ export function initUsersIfNeeded(): void {
 }
 
 export function getUsers(): UserPublic[] {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return readUsers().map(({ passwordHash, ...rest }) => rest);
 }
 
@@ -78,6 +82,16 @@ export function getUserByUsername(username: string): UserRecord | undefined {
   return readUsers().find((u) => u.username === username);
 }
 
+export function getUserByEmail(email: string): UserRecord | undefined {
+  if (!email) return undefined;
+  return readUsers().find((u) => u.email === email);
+}
+
+export function getUserByGoogleId(googleId: string): UserRecord | undefined {
+  if (!googleId) return undefined;
+  return readUsers().find((u) => u.googleId === googleId);
+}
+
 export function verifyPassword(plaintext: string, hash: string): boolean {
   return compareSync(plaintext, hash);
 }
@@ -87,6 +101,8 @@ export function createUser(data: {
   password: string;
   displayName: string;
   role?: 'admin' | 'user';
+  email?: string;
+  status?: 'active' | 'pending' | 'rejected';
 }): UserPublic {
   const users = readUsers();
 
@@ -112,20 +128,23 @@ export function createUser(data: {
     displayName: data.displayName,
     role: data.role || 'user',
     createdAt: new Date().toISOString(),
+    status: data.status || 'active',
+    ...(data.email && { email: data.email }),
   };
 
   users.push(newUser);
   writeUsers(users);
-  ensureUserDirs(id);
+  if (data.status !== 'pending') {
+    ensureUserDirs(id);
+  }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash, ...publicUser } = newUser;
   return publicUser;
 }
 
 export function updateUser(
   id: string,
-  data: { displayName?: string; password?: string; role?: 'admin' | 'user' }
+  data: { displayName?: string; password?: string; role?: 'admin' | 'user'; email?: string }
 ): void {
   const users = readUsers();
   const idx = users.findIndex((u) => u.id === id);
@@ -147,8 +166,86 @@ export function updateUser(
     }
     users[idx].role = data.role;
   }
+  if (data.email !== undefined) {
+    users[idx].email = data.email || undefined;
+  }
 
   writeUsers(users);
+}
+
+export function updateUserStatus(id: string, status: 'active' | 'pending' | 'rejected'): void {
+  const users = readUsers();
+  const idx = users.findIndex((u) => u.id === id);
+  if (idx === -1) throw new Error('Usuario no encontrado');
+
+  users[idx].status = status;
+  writeUsers(users);
+
+  // Create user directories when approved
+  if (status === 'active') {
+    ensureUserDirs(id);
+  }
+}
+
+export function createOrLinkGoogleUser(profile: {
+  googleId: string;
+  email: string;
+  name: string;
+}): UserRecord {
+  const users = readUsers();
+
+  // Check by googleId first
+  const byGoogleId = users.find((u) => u.googleId === profile.googleId);
+  if (byGoogleId) return byGoogleId;
+
+  // Check by email
+  const byEmail = users.find((u) => u.email === profile.email);
+  if (byEmail) {
+    // Link Google account to existing user
+    byEmail.googleId = profile.googleId;
+    writeUsers(users);
+    return byEmail;
+  }
+
+  // Create new user with pending status
+  const id = profile.email
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 30);
+
+  // Ensure unique id
+  let uniqueId = id;
+  let counter = 1;
+  while (users.some((u) => u.id === uniqueId)) {
+    uniqueId = `${id}_${counter}`;
+    counter++;
+  }
+
+  const newUser: UserRecord = {
+    id: uniqueId,
+    username: uniqueId,
+    passwordHash: '',
+    displayName: profile.name,
+    role: 'user',
+    createdAt: new Date().toISOString(),
+    email: profile.email,
+    status: 'pending',
+    googleId: profile.googleId,
+  };
+
+  users.push(newUser);
+  writeUsers(users);
+  return newUser;
+}
+
+export function updateLastActive(id: string): void {
+  const users = readUsers();
+  const idx = users.findIndex((u) => u.id === id);
+  if (idx !== -1) {
+    users[idx].lastActive = new Date().toISOString();
+    writeUsers(users);
+  }
 }
 
 export function deleteUser(id: string): void {

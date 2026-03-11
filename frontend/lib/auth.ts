@@ -1,7 +1,32 @@
 import NextAuth from 'next-auth';
+import type { NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+// Read Google OAuth config at init time (requires restart after config change)
+function getGoogleProvider() {
+  try {
+    const settingsFile = join(process.cwd(), '..', 'settings.json');
+    if (existsSync(settingsFile)) {
+      const settings = JSON.parse(readFileSync(settingsFile, 'utf-8'));
+      if (settings.googleOAuth?.clientId && settings.googleOAuth?.clientSecret) {
+        return Google({
+          clientId: settings.googleOAuth.clientId,
+          clientSecret: settings.googleOAuth.clientSecret,
+        });
+      }
+    }
+  } catch {}
+  return null;
+}
+
+const googleProvider = getGoogleProvider();
+
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+
+const config: NextAuthConfig = {
   providers: [
     Credentials({
       name: 'Credentials',
@@ -10,10 +35,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // Dynamic import to avoid Node.js APIs in Edge Runtime (middleware)
-        const { getUserByUsername, initUsersIfNeeded, verifyPassword } = await import('./users');
+        const { getUserByUsername, initUsersIfNeeded, verifyPassword, updateLastActive } =
+          await import('./users');
 
-        // Ensure users.json exists with seed admin on first run
         initUsersIfNeeded();
 
         const username = credentials?.username as string | undefined;
@@ -25,30 +49,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!verifyPassword(password, user.passwordHash)) return null;
 
+        // Check account status
+        const status = user.status || 'active';
+        if (status !== 'active') return null;
+
+        // Track last activity
+        updateLastActive(user.id);
+
         return {
           id: user.id,
           name: user.displayName,
-          email: `${user.username}@local`,
+          email: user.email || `${user.username}@local`,
           role: user.role,
         };
       },
     }),
+    ...(googleProvider ? [googleProvider] : []),
   ],
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
   },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === 'google') {
+        const { createOrLinkGoogleUser, updateLastActive } = await import('./users');
+        const dbUser = createOrLinkGoogleUser({
+          googleId: account.providerAccountId,
+          email: user.email || '',
+          name: user.name || '',
+        });
+
+        const status = dbUser.status || 'active';
+        if (status !== 'active') {
+          return '/login?error=pending';
+        }
+
+        // Track last activity
+        updateLastActive(dbUser.id);
+
+        // Attach db user info to the user object for jwt callback
+        (user as unknown as Record<string, unknown>).id = dbUser.id;
+        (user as unknown as Record<string, unknown>).role = dbUser.role;
+      }
+      return true;
+    },
     jwt({ token, user }) {
-      // On sign-in, persist id and role into the JWT
       if (user) {
-        token.id = user.id as string;
-        token.role = (user as { role?: string }).role || 'user';
+        token.id =
+          ((user as unknown as Record<string, unknown>).id as string) || (user.id as string);
+        token.role = ((user as unknown as Record<string, unknown>).role as string) || 'user';
       }
       return token;
     },
     session({ session, token }) {
-      // Expose id and role on the session object
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
@@ -57,10 +111,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
-      const isLoginPage = request.nextUrl.pathname === '/login';
+      const pathname = request.nextUrl.pathname;
 
-      // Always allow login page and auth API routes
-      if (isLoginPage || request.nextUrl.pathname.startsWith('/api/auth')) {
+      // Allow public pages
+      if (PUBLIC_PATHS.some((p) => pathname === p) || pathname.startsWith('/api/auth')) {
         return true;
       }
 
@@ -71,11 +125,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Protect everything else
       if (!isLoggedIn) {
-        return false; // Redirect to login
+        return false;
       }
 
       // Protect admin routes
-      if (request.nextUrl.pathname.startsWith('/admin')) {
+      if (pathname.startsWith('/admin')) {
         const role = auth?.user?.role;
         if (role !== 'admin') {
           return Response.redirect(new URL('/', request.nextUrl));
@@ -85,4 +139,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
   },
-});
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(config);

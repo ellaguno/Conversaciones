@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { username, password, displayName, role } = body;
+    const { username, password, displayName, role, email } = body;
 
     if (!username || !password || !displayName) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 });
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
       password,
       displayName,
       role: role === 'admin' ? 'admin' : 'user',
+      ...(email && { email }),
     });
 
     return NextResponse.json({ user }, { status: 201 });

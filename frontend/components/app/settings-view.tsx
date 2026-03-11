@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   CARTESIA_VOICES_ES,
@@ -32,9 +32,30 @@ interface SettingsViewProps {
   configs: Record<string, PersonalityConfig>;
   onSave: (configs: Record<string, PersonalityConfig>) => void;
   onBack: () => void;
+  isAdmin?: boolean;
 }
 
-export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
+interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  fromAddress: string;
+  secure: boolean;
+}
+
+interface GoogleOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+interface ServerSettings {
+  smtp: SmtpConfig;
+  googleOAuth: GoogleOAuthConfig;
+  analysisModel: string;
+}
+
+export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewProps) {
   const [draft, setDraft] = useState<Record<string, PersonalityConfig>>({ ...configs });
   const [selected, setSelected] = useState(ALL_PERSONALITIES[0].key);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -43,7 +64,37 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
   const [passwordMsg, setPasswordMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // Email profile
+  const [userEmail, setUserEmail] = useState('');
+  const [emailMsg, setEmailMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  // Server settings (admin only)
+  const [serverSettings, setServerSettings] = useState<ServerSettings | null>(null);
+  const [serverMsg, setServerMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [savingServer, setSavingServer] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [showServerConfig, setShowServerConfig] = useState(false);
+
   const current = draft[selected] || DEFAULT_CONFIGS[selected];
+
+  // Load user email on mount
+  useEffect(() => {
+    fetch('/api/auth/profile')
+      .then((r) => r.json())
+      .then((data) => setUserEmail(data.email || ''))
+      .catch(() => {});
+  }, []);
+
+  // Load server settings for admin
+  useEffect(() => {
+    if (isAdmin && showServerConfig && !serverSettings) {
+      fetch('/api/admin/settings')
+        .then((r) => r.json())
+        .then((data) => setServerSettings(data.settings || null))
+        .catch(() => {});
+    }
+  }, [isAdmin, showServerConfig, serverSettings]);
 
   const update = (field: keyof PersonalityConfig, value: string | number) => {
     setDraft((prev) => ({
@@ -96,6 +147,86 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
       setPasswordMsg({ text: 'Error de conexion', error: true });
     }
     setChangingPassword(false);
+  };
+
+  const handleSaveEmail = async () => {
+    setSavingEmail(true);
+    setEmailMsg(null);
+    try {
+      const res = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail }),
+      });
+      if (res.ok) {
+        setEmailMsg({ text: 'Email guardado', error: false });
+      } else {
+        const data = await res.json();
+        setEmailMsg({ text: data.error || 'Error', error: true });
+      }
+    } catch {
+      setEmailMsg({ text: 'Error de conexion', error: true });
+    }
+    setSavingEmail(false);
+  };
+
+  const handleSaveServerSettings = async () => {
+    if (!serverSettings) return;
+    setSavingServer(true);
+    setServerMsg(null);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverSettings),
+      });
+      if (res.ok) {
+        setServerMsg({ text: 'Configuracion guardada', error: false });
+      } else {
+        const data = await res.json();
+        setServerMsg({ text: data.error || 'Error', error: true });
+      }
+    } catch {
+      setServerMsg({ text: 'Error de conexion', error: true });
+    }
+    setSavingServer(false);
+  };
+
+  const handleTestSmtp = async () => {
+    // Save first, then test
+    if (serverSettings) {
+      await handleSaveServerSettings();
+    }
+    setTestingSmtp(true);
+    setServerMsg(null);
+    try {
+      const res = await fetch('/api/admin/settings', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setServerMsg({ text: 'Conexion SMTP exitosa', error: false });
+      } else {
+        setServerMsg({ text: data.error || 'Error de conexion SMTP', error: true });
+      }
+    } catch {
+      setServerMsg({ text: 'Error de conexion', error: true });
+    }
+    setTestingSmtp(false);
+  };
+
+  const updateSmtp = (field: keyof SmtpConfig, value: string | number | boolean) => {
+    if (!serverSettings) return;
+    setServerSettings({
+      ...serverSettings,
+      smtp: { ...serverSettings.smtp, [field]: value },
+    });
+  };
+
+  const updateOAuth = (field: keyof GoogleOAuthConfig, value: string) => {
+    if (!serverSettings) return;
+    setServerSettings({
+      ...serverSettings,
+      googleOAuth: { ...serverSettings.googleOAuth, [field]: value },
+    });
   };
 
   return (
@@ -236,8 +367,40 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
           </Button>
         </div>
 
-        {/* Password change */}
+        {/* Email profile */}
         <div className="border-border bg-card mt-8 rounded-xl border p-5">
+          <h2 className="text-foreground mb-4 text-sm font-bold">Correo electronico</h2>
+          <p className="text-muted-foreground mb-3 text-xs">
+            Tu correo para recibir notas de sesion y recuperar tu contraseña.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              placeholder="tu@correo.com"
+              className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none"
+            />
+            <Button
+              onClick={handleSaveEmail}
+              disabled={savingEmail}
+              variant="outline"
+              className="rounded-full text-xs font-bold"
+            >
+              {savingEmail ? '...' : 'Guardar'}
+            </Button>
+          </div>
+          {emailMsg && (
+            <p
+              className={`mt-2 text-xs ${emailMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}
+            >
+              {emailMsg.text}
+            </p>
+          )}
+        </div>
+
+        {/* Password change */}
+        <div className="border-border bg-card mt-4 rounded-xl border p-5">
           <h2 className="text-foreground mb-4 text-sm font-bold">Cambiar contraseña</h2>
           <div className="space-y-3">
             <input
@@ -279,6 +442,155 @@ export function SettingsView({ configs, onSave, onBack }: SettingsViewProps) {
             </Button>
           </div>
         </div>
+
+        {/* Server configuration (admin only) */}
+        {isAdmin && (
+          <div className="border-border bg-card mt-4 rounded-xl border p-5">
+            <button
+              onClick={() => setShowServerConfig(!showServerConfig)}
+              className="text-foreground flex w-full items-center justify-between text-sm font-bold"
+            >
+              <span>Configuracion del servidor</span>
+              <span className="text-muted-foreground text-xs">{showServerConfig ? '▲' : '▼'}</span>
+            </button>
+
+            {showServerConfig && serverSettings && (
+              <div className="mt-5 space-y-6">
+                {/* SMTP Settings */}
+                <div>
+                  <h3 className="text-foreground mb-3 text-xs font-bold tracking-wide uppercase">
+                    Correo SMTP
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={serverSettings.smtp.host}
+                        onChange={(e) => updateSmtp('host', e.target.value)}
+                        placeholder="Servidor SMTP (ej: smtp.gmail.com)"
+                        className="border-border bg-background text-foreground placeholder:text-muted-foreground flex-1 rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                      />
+                      <input
+                        type="number"
+                        value={serverSettings.smtp.port}
+                        onChange={(e) => updateSmtp('port', parseInt(e.target.value) || 587)}
+                        placeholder="Puerto"
+                        className="border-border bg-background text-foreground w-20 rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={serverSettings.smtp.user}
+                      onChange={(e) => updateSmtp('user', e.target.value)}
+                      placeholder="Usuario SMTP"
+                      className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={serverSettings.smtp.password}
+                      onChange={(e) => updateSmtp('password', e.target.value)}
+                      placeholder="Contraseña SMTP"
+                      className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                    />
+                    <input
+                      type="email"
+                      value={serverSettings.smtp.fromAddress}
+                      onChange={(e) => updateSmtp('fromAddress', e.target.value)}
+                      placeholder="Correo remitente (From)"
+                      className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                    />
+                    <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={serverSettings.smtp.secure}
+                        onChange={(e) => updateSmtp('secure', e.target.checked)}
+                        className="accent-primary"
+                      />
+                      Conexion segura (TLS/SSL - puerto 465)
+                    </label>
+                  </div>
+                </div>
+
+                {/* Google OAuth Settings */}
+                <div>
+                  <h3 className="text-foreground mb-3 text-xs font-bold tracking-wide uppercase">
+                    Google OAuth
+                  </h3>
+                  <p className="text-muted-foreground mb-2 text-[10px]">
+                    Requiere reiniciar el servidor despues de guardar. Configura en Google Cloud
+                    Console.
+                  </p>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={serverSettings.googleOAuth.clientId}
+                      onChange={(e) => updateOAuth('clientId', e.target.value)}
+                      placeholder="Client ID"
+                      className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={serverSettings.googleOAuth.clientSecret}
+                      onChange={(e) => updateOAuth('clientSecret', e.target.value)}
+                      placeholder="Client Secret"
+                      className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Analysis Model */}
+                <div>
+                  <h3 className="text-foreground mb-3 text-xs font-bold tracking-wide uppercase">
+                    IA de analisis (notas terapeuticas)
+                  </h3>
+                  <input
+                    type="text"
+                    value={serverSettings.analysisModel}
+                    onChange={(e) =>
+                      setServerSettings({ ...serverSettings, analysisModel: e.target.value })
+                    }
+                    placeholder="anthropic/claude-opus-4.6"
+                    className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 font-mono text-xs focus:outline-none"
+                  />
+                  <p className="text-muted-foreground mt-1 text-[10px]">
+                    Modelo usado por Dra. Ana para generar notas clinicas. Ej:
+                    anthropic/claude-sonnet-4.6, openai/gpt-4o
+                  </p>
+                </div>
+
+                {serverMsg && (
+                  <p
+                    className={`text-xs ${serverMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}
+                  >
+                    {serverMsg.text}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSaveServerSettings}
+                    disabled={savingServer}
+                    className="flex-1 rounded-full font-mono text-xs font-bold uppercase"
+                  >
+                    {savingServer ? 'Guardando...' : 'Guardar configuracion'}
+                  </Button>
+                  <Button
+                    onClick={handleTestSmtp}
+                    disabled={testingSmtp}
+                    variant="outline"
+                    className="rounded-full text-xs"
+                  >
+                    {testingSmtp ? 'Probando...' : 'Probar SMTP'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {showServerConfig && !serverSettings && (
+              <p className="text-muted-foreground mt-3 text-xs">Cargando...</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
