@@ -196,6 +196,7 @@ interface WelcomeViewProps {
   onLogout?: () => void;
   onAdminPanel?: () => void;
   isAdmin?: boolean;
+  initialPatientId?: string;
 }
 
 export const WelcomeView = ({
@@ -210,11 +211,14 @@ export const WelcomeView = ({
   onLogout,
   onAdminPanel,
   isAdmin,
+  initialPatientId,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [patients, setPatients] = useState<PatientInfo[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    initialPatientId || null
+  );
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
   const [selectedAdvisor, setSelectedAdvisor] = useState('asesor_sistemas');

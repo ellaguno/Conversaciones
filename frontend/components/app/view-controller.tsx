@@ -47,6 +47,7 @@ interface ViewControllerProps {
   onLogout: () => void;
   onAdminPanel?: () => void;
   isAdmin?: boolean;
+  initialPatientId?: string;
 }
 
 export function ViewController({
@@ -62,6 +63,7 @@ export function ViewController({
   onLogout,
   onAdminPanel,
   isAdmin,
+  initialPatientId,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
@@ -143,6 +145,7 @@ export function ViewController({
           onLogout={onLogout}
           onAdminPanel={onAdminPanel}
           isAdmin={isAdmin}
+          initialPatientId={initialPatientId}
         />
       )}
       {isConnected && (

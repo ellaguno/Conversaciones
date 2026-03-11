@@ -32,6 +32,8 @@ function AppSetup() {
 
 interface AppProps {
   appConfig: AppConfig;
+  initialPersonality?: string;
+  initialPatientId?: string;
 }
 
 function SessionInner({
@@ -50,6 +52,7 @@ function SessionInner({
   isAdmin,
   therapyMethod,
   coupleTherapy,
+  initialPatientId,
 }: {
   appConfig: AppConfig;
   personality: string;
@@ -66,6 +69,7 @@ function SessionInner({
   isAdmin: boolean;
   therapyMethod: string;
   coupleTherapy: boolean;
+  initialPatientId?: string;
 }) {
   const tokenSource = useMemo(() => {
     return TokenSource.custom(async () => {
@@ -119,6 +123,7 @@ function SessionInner({
           onLogout={onLogout}
           onAdminPanel={onAdminPanel}
           isAdmin={isAdmin}
+          initialPatientId={initialPatientId}
         />
       </main>
       <StartAudioButton label="Start Audio" />
@@ -138,12 +143,12 @@ function SessionInner({
   );
 }
 
-export function App({ appConfig }: AppProps) {
+export function App({ appConfig, initialPersonality, initialPatientId }: AppProps) {
   const { data: authSession } = useAuthSession();
   const router = useRouter();
   const isAdmin = (authSession?.user as { role?: string } | undefined)?.role === 'admin';
-  const [selectedPersonality, setSelectedPersonality] = useState('trader');
-  const [activePersonality, setActivePersonality] = useState('trader');
+  const [selectedPersonality, setSelectedPersonality] = useState(initialPersonality || 'trader');
+  const [activePersonality, setActivePersonality] = useState(initialPersonality || 'trader');
   const [activePatientId, setActivePatientId] = useState('');
   const [sessionId, setSessionId] = useState(0);
   const [autoConnect, setAutoConnect] = useState(false);
@@ -213,6 +218,7 @@ export function App({ appConfig }: AppProps) {
       isAdmin={isAdmin}
       therapyMethod={activeTherapyMethod}
       coupleTherapy={activeCoupleTherapy}
+      initialPatientId={initialPatientId}
     />
   );
 }
