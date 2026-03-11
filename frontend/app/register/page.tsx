@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
@@ -130,9 +131,9 @@ export default function RegisterPage() {
         </Button>
         <p className="text-muted-foreground text-center text-xs">
           ¿Ya tienes cuenta?{' '}
-          <a href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-primary hover:underline">
             Iniciar sesion
-          </a>
+          </Link>
         </p>
       </form>
       <span className="text-muted-foreground absolute right-4 bottom-3 text-[10px]">

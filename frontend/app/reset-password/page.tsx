@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
@@ -22,9 +23,9 @@ function ResetForm() {
           <p className="text-muted-foreground text-sm">
             Este enlace de restablecimiento no es valido o ha expirado.
           </p>
-          <a href="/login" className="text-primary text-sm hover:underline">
+          <Link href="/login" className="text-primary text-sm hover:underline">
             Ir al inicio de sesion
-          </a>
+          </Link>
         </div>
       </div>
     );

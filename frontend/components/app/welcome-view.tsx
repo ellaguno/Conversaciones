@@ -134,6 +134,25 @@ const SPIRITUAL_GUIDES = [
   { key: 'pandit', name: 'Pandit Hindú' },
 ];
 
+// Reverse map: individual personality key → { category, displayName }
+const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: string }> = (() => {
+  const map: Record<string, { category: string; displayName: string }> = {};
+  for (const g of SPIRITUAL_GUIDES) map[g.key] = { category: 'espiritual', displayName: g.name };
+  for (const g of DEFAULT_FAMOUS_CHARACTERS)
+    map[g.key] = { category: 'normal', displayName: g.name };
+  for (const g of SYSTEM_ADVISORS) map[g.key] = { category: 'asesor', displayName: g.name };
+  for (const g of LAWYER_SPECIALTIES) map[g.key] = { category: 'abogado', displayName: g.name };
+  for (const g of TRADER_MARKETS) map[g.key] = { category: 'trader', displayName: g.name };
+  // Category keys map to themselves
+  map['psicologo'] = { category: 'psicologo', displayName: 'Dra. Ana - Psicóloga clínica' };
+  map['espiritual'] = { category: 'espiritual', displayName: 'Guía Espiritual' };
+  map['normal'] = { category: 'normal', displayName: 'Alguien Normal' };
+  map['asesor'] = { category: 'asesor', displayName: 'Asesor de Sistemas' };
+  map['abogado'] = { category: 'abogado', displayName: 'Abogado General' };
+  map['trader'] = { category: 'trader', displayName: 'Trader General' };
+  return map;
+})();
+
 const THERAPY_METHODS = [
   { key: 'cbt', name: 'CBT - Cognitivo-Conductual', short: 'CBT' },
   { key: 'act', name: 'ACT - Aceptacion y Compromiso', short: 'ACT' },
@@ -242,6 +261,27 @@ export const WelcomeView = ({
   const [therapyMethod, setTherapyMethod] = useState('mindfulness');
   const [coupleTherapy, setCoupleTherapy] = useState(false);
 
+  // Resolve initialPersonality (individual key like 'hippy') to its category + sub-selector
+  const [preselectedBanner, setPreselectedBanner] = useState<string | null>(null);
+  useEffect(() => {
+    const info = PERSONALITY_TO_CATEGORY[selectedPersonality];
+    if (!info) return;
+    const { category } = info;
+    // If selectedPersonality is already a category key, nothing to resolve
+    if (selectedPersonality === category) return;
+    // Set the category card as selected
+    onSelectPersonality(category);
+    // Set the correct sub-selector
+    if (category === 'espiritual') setSelectedGuide(selectedPersonality);
+    else if (category === 'normal') setSelectedFamous(selectedPersonality);
+    else if (category === 'asesor') setSelectedAdvisor(selectedPersonality);
+    else if (category === 'abogado') setSelectedLawyer(selectedPersonality);
+    else if (category === 'trader') setSelectedTrader(selectedPersonality);
+    // Show banner
+    setPreselectedBanner(info.displayName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     fetch('/api/metrics')
       .then((r) => r.json())
@@ -339,6 +379,20 @@ export const WelcomeView = ({
         )}
 
         <p className="text-muted-foreground mb-5 text-sm">Elige con quien quieres hablar</p>
+
+        {preselectedBanner && (
+          <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border-2 border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-2.5">
+            <span className="text-foreground text-sm">
+              Vas a conversar con <strong>{preselectedBanner}</strong>
+            </span>
+            <button
+              onClick={() => setPreselectedBanner(null)}
+              className="text-muted-foreground hover:text-foreground ml-2 text-xs"
+            >
+              &times;
+            </button>
+          </div>
+        )}
 
         <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
           {PERSONALITIES.map((p) => (

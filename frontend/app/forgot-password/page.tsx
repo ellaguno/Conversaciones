@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function ForgotPasswordPage() {
@@ -41,9 +42,9 @@ export default function ForgotPasswordPage() {
             Si existe una cuenta con ese usuario o correo, recibiras un enlace para restablecer tu
             contraseña.
           </p>
-          <a href="/login" className="text-primary text-sm hover:underline">
+          <Link href="/login" className="text-primary text-sm hover:underline">
             Volver al inicio de sesion
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -79,9 +80,9 @@ export default function ForgotPasswordPage() {
           {loading ? 'Enviando...' : 'Enviar enlace'}
         </Button>
         <p className="text-muted-foreground text-center text-xs">
-          <a href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-primary hover:underline">
             Volver al inicio de sesion
-          </a>
+          </Link>
         </p>
       </form>
     </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Suspense } from 'react';
 import { signIn } from 'next-auth/react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
@@ -142,12 +143,12 @@ function LoginForm() {
         )}
 
         <div className="flex items-center justify-between">
-          <a href="/forgot-password" className="text-primary text-xs hover:underline">
+          <Link href="/forgot-password" className="text-primary text-xs hover:underline">
             ¿Olvidaste tu contraseña?
-          </a>
-          <a href="/register" className="text-primary text-xs hover:underline">
+          </Link>
+          <Link href="/register" className="text-primary text-xs hover:underline">
             Crear cuenta
-          </a>
+          </Link>
         </div>
       </form>
       <span className="text-muted-foreground absolute right-4 bottom-3 text-[10px]">
