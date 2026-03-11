@@ -338,7 +338,15 @@ export const WelcomeView = ({
   return (
     <div ref={ref}>
       <section className="bg-background flex flex-col items-center justify-center px-4 text-center">
-        <h1 className="text-foreground mb-1 text-2xl font-bold">Conversaciones</h1>
+        {/* Logo + title */}
+        <div className="mb-1 flex items-center gap-3">
+          <img
+            src="/logo_transparente.png"
+            alt="Conversaciones"
+            className="hidden h-10 w-10 md:block"
+          />
+          <h1 className="text-foreground text-2xl font-bold">Conversaciones</h1>
+        </div>
 
         {/* Metrics bar */}
         {metrics && metrics.total_tokens > 0 && (
