@@ -203,7 +203,7 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
       const res = await fetch('/api/admin/settings', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        setServerMsg({ text: 'Conexion SMTP exitosa', error: false });
+        setServerMsg({ text: data.message || 'Conexion SMTP exitosa', error: false });
       } else {
         setServerMsg({ text: data.error || 'Error de conexion SMTP', error: true });
       }

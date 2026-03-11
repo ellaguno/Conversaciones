@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { testSmtpConnection } from '@/lib/email';
+import { sendEmail, testSmtpConnection } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
 import { readSettings, writeSettings } from '@/lib/settings';
+import { getUserById } from '@/lib/users';
 
 async function requireAdmin(req: Request): Promise<NextResponse | null> {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
@@ -79,14 +80,42 @@ export async function PUT(req: Request) {
   }
 }
 
-// Test SMTP connection
+// Test SMTP connection and send test email
 export async function POST(req: Request) {
   const denied = await requireAdmin(req);
   if (denied) return denied;
 
   try {
+    // First verify connection
     await testSmtpConnection();
-    return NextResponse.json({ ok: true, message: 'Conexion SMTP exitosa' });
+
+    // Then send a real test email to the admin user
+    const session = await auth();
+    const user = session?.user?.id ? getUserById(session.user.id) : null;
+    const toEmail = user?.email;
+
+    if (!toEmail) {
+      return NextResponse.json({
+        ok: true,
+        message:
+          'Conexion SMTP exitosa, pero no tienes email configurado en tu perfil para enviar una prueba.',
+      });
+    }
+
+    const now = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    const html = [
+      '<div style="font-family:sans-serif;padding:20px;">',
+      '<h2 style="color:#7c3aed;">Prueba de correo exitosa</h2>',
+      '<p>Este correo confirma que la configuracion SMTP de <strong>Conversaciones</strong> funciona correctamente.</p>',
+      `<p style="color:#6b7280;font-size:13px;">Enviado el ${now}</p>`,
+      '</div>',
+    ].join('\n');
+    await sendEmail(toEmail, 'Prueba SMTP - Conversaciones', html);
+
+    return NextResponse.json({
+      ok: true,
+      message: `Conexion exitosa. Correo de prueba enviado a ${toEmail}`,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error de conexion';
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
