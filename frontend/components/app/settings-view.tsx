@@ -353,23 +353,25 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
             </div>
           </div>
 
-          {/* Model */}
-          <div>
-            <label className="text-muted-foreground mb-1 block text-xs font-semibold uppercase">
-              Modelo de IA (OpenRouter)
-            </label>
-            <input
-              type="text"
-              value={current.model || DEFAULT_MODEL}
-              onChange={(e) => update('model', e.target.value)}
-              placeholder={DEFAULT_MODEL}
-              className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary w-full rounded-lg border px-3 py-2 font-mono text-xs focus:outline-none"
-            />
-            <p className="text-muted-foreground mt-1 text-[10px]">
-              Modelo para conversacion en vivo. Ej: google/gemini-2.5-flash, openai/gpt-4o-mini,
-              meta-llama/llama-4-scout
-            </p>
-          </div>
+          {/* Model (admin only) */}
+          {isAdmin && (
+            <div>
+              <label className="text-muted-foreground mb-1 block text-xs font-semibold uppercase">
+                Modelo de IA (OpenRouter)
+              </label>
+              <input
+                type="text"
+                value={current.model || DEFAULT_MODEL}
+                onChange={(e) => update('model', e.target.value)}
+                placeholder={DEFAULT_MODEL}
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary w-full rounded-lg border px-3 py-2 font-mono text-xs focus:outline-none"
+              />
+              <p className="text-muted-foreground mt-1 text-[10px]">
+                Modelo para conversacion en vivo. Ej: google/gemini-2.5-flash, openai/gpt-4o-mini,
+                meta-llama/llama-4-scout
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
