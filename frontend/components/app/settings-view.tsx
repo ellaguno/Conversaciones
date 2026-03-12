@@ -9,6 +9,11 @@ import {
   type PersonalityConfig,
   VISUALIZER_TYPES,
 } from '@/lib/personalities-config';
+import {
+  type PersonalityLayout,
+  loadPersonalityLayout,
+  savePersonalityLayout,
+} from '@/components/app/welcome-view';
 
 const ALL_PERSONALITIES = [
   { key: 'trader', emoji: '📈' },
@@ -26,6 +31,15 @@ const ALL_PERSONALITIES = [
   { key: 'imam', emoji: '☪️' },
   { key: 'rabino', emoji: '✡️' },
   { key: 'pandit', emoji: '🕉️' },
+];
+
+const PERSONALITY_CATEGORIES = [
+  { key: 'trader', name: 'Trader', emoji: '📈' },
+  { key: 'abogado', name: 'Abogado', emoji: '⚖️' },
+  { key: 'psicologo', name: 'Dra. Ana', emoji: '🧠' },
+  { key: 'asesor', name: 'Asesor de Sistemas', emoji: '🖥️' },
+  { key: 'normal', name: 'Personaje Famoso', emoji: '🌟' },
+  { key: 'espiritual', name: 'Guía Espiritual', emoji: '🕊️' },
 ];
 
 interface SettingsViewProps {
@@ -75,6 +89,10 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
   const [savingServer, setSavingServer] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [showServerConfig, setShowServerConfig] = useState(false);
+
+  // Personality layout (visible categories & order)
+  const [layout, setLayout] = useState<PersonalityLayout>(loadPersonalityLayout);
+  const [layoutMsg, setLayoutMsg] = useState<{ text: string; error: boolean } | null>(null);
 
   const current = draft[selected] || DEFAULT_CONFIGS[selected];
 
@@ -367,8 +385,64 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
           </Button>
         </div>
 
-        {/* Email profile */}
+        {/* Personality layout (categories order) */}
         <div className="border-border bg-card mt-8 rounded-xl border p-5">
+          <h2 className="text-foreground mb-1 text-sm font-bold">Personalidades visibles</h2>
+          <p className="text-muted-foreground mb-4 text-xs">
+            Asigna un numero del 1 al 6 para ordenar. Dejalo en 0 para ocultar.
+          </p>
+          <div className="space-y-2">
+            {PERSONALITY_CATEGORIES.map((cat) => (
+              <div
+                key={cat.key}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
+                  layout[cat.key] > 0
+                    ? 'border-border bg-background'
+                    : 'border-border/50 bg-muted/30 opacity-50'
+                }`}
+              >
+                <span className="text-lg">{cat.emoji}</span>
+                <span className="text-foreground flex-1 text-sm font-medium">{cat.name}</span>
+                <select
+                  value={layout[cat.key] || 0}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setLayout((prev) => ({ ...prev, [cat.key]: val }));
+                    setLayoutMsg(null);
+                  }}
+                  className="border-border bg-background text-foreground w-16 rounded-lg border px-2 py-1 text-center text-sm font-mono focus:outline-none"
+                >
+                  <option value={0}>—</option>
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          {layoutMsg && (
+            <p
+              className={`mt-3 text-xs ${layoutMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}
+            >
+              {layoutMsg.text}
+            </p>
+          )}
+          <Button
+            onClick={() => {
+              savePersonalityLayout(layout);
+              setLayoutMsg({ text: 'Orden guardado', error: false });
+            }}
+            variant="outline"
+            className="mt-3 w-full rounded-full text-xs font-bold"
+          >
+            Guardar orden
+          </Button>
+        </div>
+
+        {/* Email profile */}
+        <div className="border-border bg-card mt-4 rounded-xl border p-5">
           <h2 className="text-foreground mb-4 text-sm font-bold">Correo electronico</h2>
           <p className="text-muted-foreground mb-3 text-xs">
             Tu correo para recibir notas de sesion y recuperar tu contraseña.

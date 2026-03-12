@@ -73,7 +73,15 @@ function LoginForm() {
 
   return (
     <div className="bg-background flex min-h-svh items-center justify-center px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex justify-center">
+          <img
+            src="/logo_transparente.png"
+            alt="Conversaciones"
+            className="h-32 w-auto object-contain"
+          />
+        </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <h1 className="text-foreground text-center text-xl font-bold">Iniciar sesion</h1>
 
         {error && (
@@ -151,6 +159,7 @@ function LoginForm() {
           </Link>
         </div>
       </form>
+      </div>
       <span className="text-muted-foreground absolute right-4 bottom-3 text-[10px]">
         v{process.env.NEXT_PUBLIC_APP_VERSION}
       </span>

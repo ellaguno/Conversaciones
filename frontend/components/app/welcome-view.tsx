@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-const PERSONALITIES = [
+const ALL_PERSONALITY_CATEGORIES = [
   {
     key: 'trader',
     name: 'Trader',
@@ -41,6 +41,40 @@ const PERSONALITIES = [
     emoji: '🕊️',
   },
 ];
+
+// Layout config: maps category key → position (1-6). 0 or absent = hidden.
+export type PersonalityLayout = Record<string, number>;
+
+const DEFAULT_LAYOUT: PersonalityLayout = {
+  trader: 1,
+  abogado: 2,
+  psicologo: 3,
+  asesor: 4,
+  normal: 5,
+  espiritual: 6,
+};
+
+export function loadPersonalityLayout(): PersonalityLayout {
+  if (typeof window === 'undefined') return DEFAULT_LAYOUT;
+  try {
+    const saved = localStorage.getItem('personality-layout');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_LAYOUT, ...parsed };
+    }
+  } catch {}
+  return DEFAULT_LAYOUT;
+}
+
+export function savePersonalityLayout(layout: PersonalityLayout) {
+  localStorage.setItem('personality-layout', JSON.stringify(layout));
+}
+
+function getVisiblePersonalities(layout: PersonalityLayout) {
+  return ALL_PERSONALITY_CATEGORIES
+    .filter((p) => layout[p.key] && layout[p.key] > 0)
+    .sort((a, b) => (layout[a.key] || 99) - (layout[b.key] || 99));
+}
 
 const DEFAULT_FAMOUS_CHARACTERS = [
   { key: 'normal', name: 'Alguien Normal' },
@@ -233,6 +267,13 @@ export const WelcomeView = ({
   initialPatientId,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
+  const [personalityLayout, setPersonalityLayout] = useState<PersonalityLayout>(DEFAULT_LAYOUT);
+  const visiblePersonalities = getVisiblePersonalities(personalityLayout);
+
+  useEffect(() => {
+    setPersonalityLayout(loadPersonalityLayout());
+  }, []);
+
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [patients, setPatients] = useState<PatientInfo[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
@@ -339,11 +380,11 @@ export const WelcomeView = ({
     <div ref={ref}>
       <section className="bg-background flex flex-col items-center justify-center px-4 text-center">
         {/* Logo + title */}
-        <div className="mb-1 flex items-center gap-3">
+        <div className="mb-3 flex flex-col items-center gap-2">
           <img
             src="/logo_transparente.png"
             alt="Conversaciones"
-            className="hidden h-10 w-10 md:block"
+            className="h-24 w-auto object-contain"
           />
           <h1 className="text-foreground text-2xl font-bold">Conversaciones</h1>
         </div>
@@ -403,7 +444,7 @@ export const WelcomeView = ({
         )}
 
         <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
-          {PERSONALITIES.map((p) => (
+          {visiblePersonalities.map((p) => (
             <button
               key={p.key}
               onClick={() => onSelectPersonality(p.key)}
