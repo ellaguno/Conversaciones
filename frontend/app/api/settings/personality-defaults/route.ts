@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { readPersonalityDefaults, writePersonalityDefaults } from '@/lib/settings';
 import { rateLimit } from '@/lib/rate-limit';
+import { readPersonalityDefaults, writePersonalityDefaults } from '@/lib/settings';
 
 // Public: anyone can read admin defaults
 export async function GET(req: Request) {

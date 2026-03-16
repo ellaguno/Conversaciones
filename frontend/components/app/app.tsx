@@ -141,12 +141,26 @@ function SessionInner({
     appConfig.agentName ? { agentName: appConfig.agentName } : undefined
   );
 
-  // Guest timer
-  const [remaining, setRemaining] = useState(guestMinutes * 60);
+  // Guest timer — persist start time in sessionStorage so refresh doesn't reset it
+  const [remaining, setRemaining] = useState(() => {
+    if (!isGuest) return guestMinutes * 60;
+    const GUEST_START_KEY = 'guest_start_ts';
+    const saved = sessionStorage.getItem(GUEST_START_KEY);
+    if (saved) {
+      const elapsed = Math.floor((Date.now() - parseInt(saved, 10)) / 1000);
+      return Math.max(0, guestMinutes * 60 - elapsed);
+    }
+    sessionStorage.setItem(GUEST_START_KEY, Date.now().toString());
+    return guestMinutes * 60;
+  });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!isGuest) return;
+    if (remaining <= 0) {
+      onGuestExpired();
+      return;
+    }
     timerRef.current = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
@@ -160,7 +174,7 @@ function SessionInner({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isGuest, onGuestExpired]);
+  }, [isGuest, remaining, onGuestExpired]);
 
   const minutesLeft = Math.floor(remaining / 60);
   const secondsLeft = remaining % 60;
@@ -256,10 +270,9 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const [guestExpired, setGuestExpired] = useState(false);
 
   // Admin personality defaults (fetched from server)
-  const [adminDefaults, setAdminDefaults] = useState<Record<
-    string,
-    PersonalityConfig
-  > | null>(null);
+  const [adminDefaults, setAdminDefaults] = useState<Record<string, PersonalityConfig> | null>(
+    null
+  );
 
   useEffect(() => {
     // Fetch admin defaults and guest config in parallel

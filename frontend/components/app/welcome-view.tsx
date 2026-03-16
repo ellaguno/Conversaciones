@@ -887,7 +887,7 @@ export const WelcomeView = ({
           <div className="mt-4 w-full max-w-md rounded-xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/5 px-4 py-3 text-center">
             <p className="text-foreground text-xs font-medium">
               Estas en modo de prueba.{' '}
-              <Link href="/register" className="font-bold text-[var(--accent)] underline">
+              <Link href="/register" className="text-primary font-bold underline">
                 Crea tu cuenta
               </Link>{' '}
               para tiempo ilimitado e historial de conversaciones.
@@ -899,7 +899,7 @@ export const WelcomeView = ({
         <div className="mt-4 flex items-center gap-4">
           {isGuest ? (
             <>
-              <Link href="/register" className="text-xs font-bold text-[var(--accent)] underline">
+              <Link href="/register" className="text-primary text-xs font-bold underline">
                 Crear cuenta
               </Link>
               <Link
