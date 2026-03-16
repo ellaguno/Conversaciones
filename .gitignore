@@ -36,6 +36,10 @@ users.json
 # Auth (legacy)
 auth-config.json
 
+# Server config (contains secrets and local settings)
+settings.json
+personality-defaults.json
+
 # Claude
 .claude/
 
