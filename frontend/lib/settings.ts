@@ -21,12 +21,14 @@ export interface AppSettings {
   smtp: SmtpSettings;
   googleOAuth: GoogleOAuthSettings;
   analysisModel: string;
+  requireApproval: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   smtp: { host: '', port: 587, user: '', password: '', fromAddress: '', secure: false },
   googleOAuth: { clientId: '', clientSecret: '' },
   analysisModel: 'anthropic/claude-opus-4.6',
+  requireApproval: true,
 };
 
 export function readSettings(): AppSettings {
@@ -39,6 +41,7 @@ export function readSettings(): AppSettings {
       smtp: { ...DEFAULT_SETTINGS.smtp, ...data.smtp },
       googleOAuth: { ...DEFAULT_SETTINGS.googleOAuth, ...data.googleOAuth },
       analysisModel: data.analysisModel || DEFAULT_SETTINGS.analysisModel,
+      requireApproval: data.requireApproval ?? DEFAULT_SETTINGS.requireApproval,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

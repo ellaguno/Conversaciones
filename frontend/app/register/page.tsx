@@ -12,7 +12,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<false | 'pending' | 'active'>(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -35,8 +35,10 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Error al registrar');
+      } else if (data.requireApproval) {
+        setSuccess('pending');
       } else {
-        setSuccess(true);
+        setSuccess('active');
       }
     } catch {
       setError('Error de conexion');
@@ -49,17 +51,20 @@ export default function RegisterPage() {
       <div className="bg-background flex min-h-svh items-center justify-center px-4">
         <div className="w-full max-w-sm space-y-4 text-center">
           <div className="text-4xl">✓</div>
-          <h1 className="text-foreground text-xl font-bold">Registro enviado</h1>
+          <h1 className="text-foreground text-xl font-bold">
+            {success === 'pending' ? 'Registro enviado' : 'Cuenta creada'}
+          </h1>
           <p className="text-muted-foreground text-sm">
-            Tu solicitud ha sido enviada. Un administrador revisara tu cuenta y recibiras un correo
-            cuando sea aprobada.
+            {success === 'pending'
+              ? 'Tu solicitud ha sido enviada. Un administrador revisara tu cuenta y recibiras un correo cuando sea aprobada.'
+              : 'Tu cuenta ha sido creada exitosamente. Ya puedes iniciar sesion.'}
           </p>
           <Button
             onClick={() => router.push('/login')}
             variant="outline"
             className="rounded-full text-xs"
           >
-            Volver al inicio de sesion
+            {success === 'pending' ? 'Volver al inicio de sesion' : 'Iniciar sesion'}
           </Button>
         </div>
       </div>

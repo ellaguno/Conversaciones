@@ -72,6 +72,11 @@ export async function PUT(req: Request) {
       current.analysisModel = body.analysisModel || 'anthropic/claude-opus-4.6';
     }
 
+    // Update require approval
+    if (body.requireApproval !== undefined) {
+      current.requireApproval = !!body.requireApproval;
+    }
+
     writeSettings(current);
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -2,6 +2,7 @@ import { compareSync, hashSync } from 'bcryptjs';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ensureUserDirs } from './data-paths';
+import { readSettings } from './settings';
 
 const USERS_FILE = join(process.cwd(), '..', 'users.json');
 const BCRYPT_ROUNDS = 10;
@@ -207,7 +208,10 @@ export function createOrLinkGoogleUser(profile: {
     return byEmail;
   }
 
-  // Create new user with pending status
+  // Create new user — status depends on admin setting
+  const { requireApproval } = readSettings();
+  const initialStatus = requireApproval ? 'pending' : 'active';
+
   const id = profile.email
     .split('@')[0]
     .toLowerCase()
@@ -230,7 +234,7 @@ export function createOrLinkGoogleUser(profile: {
     role: 'user',
     createdAt: new Date().toISOString(),
     email: profile.email,
-    status: 'pending',
+    status: initialStatus,
     googleId: profile.googleId,
   };
 

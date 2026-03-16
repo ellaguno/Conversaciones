@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sendEmail } from '@/lib/email';
 import { newRegistrationEmail } from '@/lib/email-templates';
 import { rateLimit } from '@/lib/rate-limit';
+import { readSettings } from '@/lib/settings';
 import { createUser, getUserByEmail, getUsers } from '@/lib/users';
 
 export async function POST(req: Request) {
@@ -45,29 +46,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Este correo ya esta registrado' }, { status: 400 });
     }
 
+    const { requireApproval } = readSettings();
+    const initialStatus = requireApproval ? 'pending' : 'active';
+
     const user = createUser({
       username,
       password,
       displayName,
       email,
-      status: 'pending',
+      status: initialStatus,
     });
 
-    // Notify admins via email
-    try {
-      const allUsers = getUsers();
-      const admins = allUsers.filter((u) => u.role === 'admin' && u.email);
-      const emailHtml = newRegistrationEmail(username, displayName, email);
-      for (const admin of admins) {
-        if (admin.email) {
-          await sendEmail(admin.email, 'Nueva solicitud de registro - Conversaciones', emailHtml);
+    // Notify admins via email when approval is required
+    if (requireApproval) {
+      try {
+        const allUsers = getUsers();
+        const admins = allUsers.filter((u) => u.role === 'admin' && u.email);
+        const emailHtml = newRegistrationEmail(username, displayName, email);
+        for (const admin of admins) {
+          if (admin.email) {
+            await sendEmail(admin.email, 'Nueva solicitud de registro - Conversaciones', emailHtml);
+          }
         }
+      } catch {
+        // Email notification is best-effort, don't fail registration
       }
-    } catch {
-      // Email notification is best-effort, don't fail registration
     }
 
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json({ user, requireApproval }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error al registrar';
     return NextResponse.json({ error: message }, { status: 400 });

@@ -1,6 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  type PersonalityLayout,
+  loadPersonalityLayout,
+  savePersonalityLayout,
+} from '@/components/app/welcome-view';
 import { Button } from '@/components/ui/button';
 import {
   CARTESIA_VOICES_ES,
@@ -9,11 +14,6 @@ import {
   type PersonalityConfig,
   VISUALIZER_TYPES,
 } from '@/lib/personalities-config';
-import {
-  type PersonalityLayout,
-  loadPersonalityLayout,
-  savePersonalityLayout,
-} from '@/components/app/welcome-view';
 
 const ALL_PERSONALITIES = [
   { key: 'trader', emoji: '📈' },
@@ -67,6 +67,7 @@ interface ServerSettings {
   smtp: SmtpConfig;
   googleOAuth: GoogleOAuthConfig;
   analysisModel: string;
+  requireApproval: boolean;
 }
 
 export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewProps) {
@@ -412,7 +413,7 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
                     setLayout((prev) => ({ ...prev, [cat.key]: val }));
                     setLayoutMsg(null);
                   }}
-                  className="border-border bg-background text-foreground w-16 rounded-lg border px-2 py-1 text-center text-sm font-mono focus:outline-none"
+                  className="border-border bg-background text-foreground w-16 rounded-lg border px-2 py-1 text-center font-mono text-sm focus:outline-none"
                 >
                   <option value={0}>—</option>
                   {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -631,6 +632,29 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
                   <p className="text-muted-foreground mt-1 text-[10px]">
                     Modelo usado por Dra. Ana para generar notas clinicas. Ej:
                     anthropic/claude-sonnet-4.6, openai/gpt-4o
+                  </p>
+                </div>
+
+                {/* Require Approval Toggle */}
+                <div>
+                  <h3 className="text-foreground mb-3 text-xs font-bold tracking-wide uppercase">
+                    Registro de usuarios
+                  </h3>
+                  <label className="text-foreground flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={serverSettings.requireApproval}
+                      onChange={(e) =>
+                        setServerSettings({ ...serverSettings, requireApproval: e.target.checked })
+                      }
+                      className="accent-primary"
+                    />
+                    Requiere aprobacion del administrador
+                  </label>
+                  <p className="text-muted-foreground mt-1 text-[10px]">
+                    {serverSettings.requireApproval
+                      ? 'Los nuevos usuarios quedan pendientes hasta que un admin los apruebe.'
+                      : 'Los nuevos usuarios pueden acceder inmediatamente al registrarse.'}
                   </p>
                 </div>
 
