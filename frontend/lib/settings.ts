@@ -67,3 +67,20 @@ export function isGoogleOAuthConfigured(): boolean {
   const g = readSettings().googleOAuth;
   return !!(g.clientId && g.clientSecret);
 }
+
+// --- Admin personality defaults (saved separately) ---
+
+const PERSONALITY_DEFAULTS_FILE = join(process.cwd(), '..', 'personality-defaults.json');
+
+export function readPersonalityDefaults(): Record<string, unknown> | null {
+  if (!existsSync(PERSONALITY_DEFAULTS_FILE)) return null;
+  try {
+    return JSON.parse(readFileSync(PERSONALITY_DEFAULTS_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+export function writePersonalityDefaults(defaults: Record<string, unknown>): void {
+  writeFileSync(PERSONALITY_DEFAULTS_FILE, JSON.stringify(defaults, null, 2), 'utf-8');
+}

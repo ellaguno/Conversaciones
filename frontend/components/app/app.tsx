@@ -255,13 +255,27 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   } | null>(null);
   const [guestExpired, setGuestExpired] = useState(false);
 
+  // Admin personality defaults (fetched from server)
+  const [adminDefaults, setAdminDefaults] = useState<Record<
+    string,
+    PersonalityConfig
+  > | null>(null);
+
   useEffect(() => {
-    setConfigs(loadConfigs());
-    // Fetch guest config
-    fetch('/api/auth/guest-config')
-      .then((r) => r.json())
-      .then(setGuestConfig)
-      .catch(() => setGuestConfig({ guestEnabled: false, guestMinutes: 10 }));
+    // Fetch admin defaults and guest config in parallel
+    Promise.all([
+      fetch('/api/settings/personality-defaults')
+        .then((r) => r.json())
+        .then((data) => data.defaults || null)
+        .catch(() => null),
+      fetch('/api/auth/guest-config')
+        .then((r) => r.json())
+        .catch(() => ({ guestEnabled: false, guestMinutes: 10 })),
+    ]).then(([defaults, guest]) => {
+      setAdminDefaults(defaults);
+      setConfigs(loadConfigs(defaults));
+      setGuestConfig(guest);
+    });
   }, []);
 
   const isGuest = !isLoggedIn && guestConfig?.guestEnabled === true;

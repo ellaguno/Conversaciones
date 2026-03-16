@@ -138,6 +138,26 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
     setDraft({ ...DEFAULT_CONFIGS });
   };
 
+  const [savingDefaults, setSavingDefaults] = useState(false);
+  const [defaultsMsg, setDefaultsMsg] = useState<{ text: string; error: boolean } | null>(null);
+
+  const handleSaveAsServerDefaults = async () => {
+    setSavingDefaults(true);
+    setDefaultsMsg(null);
+    try {
+      const res = await fetch('/api/settings/personality-defaults', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      });
+      if (!res.ok) throw new Error();
+      setDefaultsMsg({ text: 'Defaults del servidor actualizados', error: false });
+    } catch {
+      setDefaultsMsg({ text: 'Error al guardar defaults', error: true });
+    }
+    setSavingDefaults(false);
+  };
+
   const handleChangePassword = async () => {
     setPasswordMsg(null);
     if (newPassword !== confirmPassword) {
@@ -378,16 +398,42 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
         </div>
 
         {/* Actions */}
-        <div className="mt-6 flex gap-3">
-          <Button
-            onClick={handleSave}
-            className="flex-1 rounded-full font-mono text-xs font-bold uppercase"
-          >
-            Guardar
-          </Button>
-          <Button variant="outline" onClick={handleReset} className="rounded-full text-xs">
-            Restaurar defaults
-          </Button>
+        <div className="mt-6 flex flex-col gap-2">
+          <div className="flex gap-3">
+            <Button
+              onClick={handleSave}
+              className="flex-1 rounded-full font-mono text-xs font-bold uppercase"
+            >
+              Guardar
+            </Button>
+            <Button variant="outline" onClick={handleReset} className="rounded-full text-xs">
+              Restaurar defaults
+            </Button>
+          </div>
+          {isAdmin && (
+            <div>
+              <Button
+                variant="outline"
+                onClick={handleSaveAsServerDefaults}
+                disabled={savingDefaults}
+                className="w-full rounded-full text-xs"
+              >
+                {savingDefaults
+                  ? 'Guardando...'
+                  : 'Establecer como defaults para todos los usuarios'}
+              </Button>
+              {defaultsMsg && (
+                <p
+                  className={`mt-1 text-center text-[10px] ${defaultsMsg.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}
+                >
+                  {defaultsMsg.text}
+                </p>
+              )}
+              <p className="text-muted-foreground mt-1 text-center text-[10px]">
+                Los usuarios que no hayan personalizado su configuracion usaran estos valores.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Personality layout (categories order) */}

@@ -614,17 +614,40 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
 
 const STORAGE_KEY = 'personality-configs';
 
-export function loadConfigs(): Record<string, PersonalityConfig> {
-  if (typeof window === 'undefined') return { ...DEFAULT_CONFIGS };
+export function loadConfigs(
+  adminDefaults?: Record<string, PersonalityConfig> | null
+): Record<string, PersonalityConfig> {
+  // Build base: CODE_DEFAULTS → adminDefaults
+  const base = adminDefaults
+    ? mergeConfigsDeep(DEFAULT_CONFIGS, adminDefaults)
+    : { ...DEFAULT_CONFIGS };
+
+  if (typeof window === 'undefined') return base;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      // Merge with defaults so new personalities get defaults
-      return { ...DEFAULT_CONFIGS, ...saved };
+      // User overrides on top of base
+      return mergeConfigsDeep(base, saved);
     }
   } catch {}
-  return { ...DEFAULT_CONFIGS };
+  return base;
+}
+
+/** Merge per-personality configs (each key gets its own shallow merge) */
+function mergeConfigsDeep(
+  base: Record<string, PersonalityConfig>,
+  overrides: Record<string, PersonalityConfig>
+): Record<string, PersonalityConfig> {
+  const result = { ...base };
+  for (const key of Object.keys(overrides)) {
+    if (base[key]) {
+      result[key] = { ...base[key], ...overrides[key] };
+    } else {
+      result[key] = overrides[key];
+    }
+  }
+  return result;
 }
 
 export function saveConfigs(configs: Record<string, PersonalityConfig>) {
