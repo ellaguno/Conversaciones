@@ -19,6 +19,7 @@ from personalities import (
     PERSONALITIES, DEFAULT_PERSONALITY, VISION_PERSONALITIES,
     DRA_ANA_INTAKE_PROMPT, DRA_ANA_FOLLOWUP_PROMPT,
     THERAPY_METHODS, DEFAULT_THERAPY_METHOD, DRA_ANA_COUPLE_ADDON,
+    get_voice_for_name,
 )
 from session_manager import SessionManager
 from conversation_log import ConversationLog
@@ -163,6 +164,7 @@ async def entrypoint(ctx: JobContext):
     elif personality_key.startswith("custom_"):
         # Dynamic custom personality — derive name from key
         char_name = personality_key.replace("custom_", "").replace("_", " ").title()
+        voice_id = get_voice_for_name(char_name)
         personality = {
             "name": char_name,
             "system_prompt": (
@@ -174,7 +176,7 @@ async def entrypoint(ctx: JobContext):
                 f"Sé auténtico, interesante y conversacional. "
                 f"Siempre respondes en español."
             ),
-            "voice_id": "3a35daa1-ba81-451c-9b21-59332e9db2f3",
+            "voice_id": voice_id,
             "description": f"Conversación con {char_name}",
             "has_sessions": True,
         }

@@ -616,3 +616,87 @@ DRA_ANA_FOLLOWUP_PROMPT = (
 )
 
 DEFAULT_PERSONALITY = "trader"
+
+# Voice IDs by gender for custom characters
+DEFAULT_MALE_VOICE = "3a35daa1-ba81-451c-9b21-59332e9db2f3"   # Alejandro - Mentor Calmado
+DEFAULT_FEMALE_VOICE = "ae823354-f9be-4aef-8543-f569644136b4"  # Mariana - Guía Maternal
+
+_FEMALE_NAMES = {
+    # Spanish
+    "ana", "maría", "maria", "carmen", "rosa", "elena", "isabel", "patricia", "laura",
+    "claudia", "diana", "gabriela", "lucía", "lucia", "sofía", "sofia", "valentina",
+    "mariana", "daniela", "camila", "catalina", "andrea", "paula", "carolina", "adriana",
+    "alejandra", "alicia", "beatriz", "blanca", "cecilia", "clara", "consuelo", "cristina",
+    "dolores", "elvira", "esperanza", "estela", "eva", "fernanda", "gloria", "graciela",
+    "guadalupe", "irene", "josefina", "juana", "julia", "leticia", "lourdes", "luz",
+    "magdalena", "margarita", "martha", "marta", "mercedes", "mónica", "monica", "natalia",
+    "norma", "olga", "pilar", "raquel", "rebeca", "rocío", "rocio", "sandra", "silvia",
+    "susana", "teresa", "verónica", "veronica", "victoria", "virginia", "yolanda",
+    # International / historical
+    "marie", "cleopatra", "frida", "florence", "jane", "margaret", "elizabeth", "catherine",
+    "eleanor", "joan", "helen", "anne", "mary", "emily", "charlotte",
+    "simone", "amelia", "ada", "hypatia", "hildegard", "harriet", "sojourner",
+    "malala", "indira", "golda", "angela", "aung", "benazir", "rigoberta",
+    "sor", "santa", "madre", "reina", "princesa", "emperatriz", "condesa", "duquesa",
+}
+
+_MALE_NAMES = {
+    # Spanish
+    "josé", "jose", "juan", "carlos", "pedro", "miguel", "luis", "francisco", "antonio",
+    "manuel", "jorge", "ricardo", "fernando", "rafael", "daniel", "alejandro", "roberto",
+    "pablo", "arturo", "enrique", "sergio", "raúl", "raul", "alberto", "andrés", "andres",
+    "david", "eduardo", "emilio", "ernesto", "felipe", "gabriel", "gerardo", "gustavo",
+    "héctor", "hector", "hugo", "ignacio", "jaime", "javier", "jesús", "jesus", "joaquín",
+    "joaquin", "marcos", "mario", "martín", "martin", "óscar", "oscar", "ramón", "ramon",
+    "rodrigo", "salvador", "santiago", "tomás", "tomas", "víctor", "victor",
+    # International / historical
+    "albert", "isaac", "nikola", "charles", "leonardo", "galileo", "napoleon", "alexander",
+    "aristotle", "plato", "socrates", "homer", "dante", "shakespeare", "mozart", "beethoven",
+    "einstein", "newton", "darwin", "marx", "gandhi", "buddha", "confucius", "lao",
+    "sun", "genghis", "julius", "augustus", "marco", "nelson", "winston", "buda", "buddha",
+    "séneca", "seneca", "neruda", "borja", "baroja", "kafka", "tesla",
+    "abraham", "george", "thomas", "benjamin", "john", "james", "henry", "william", "richard",
+    "santo", "san", "padre", "fray", "rey", "príncipe", "principe", "emperador", "conde",
+    "duque", "profeta", "apóstol", "apostol", "rabino", "imán", "iman", "monje",
+}
+
+_FEMALE_TITLES = {"sra", "sra.", "señora", "doña", "dra", "dra.", "doctora", "reina",
+                  "princesa", "emperatriz", "sor", "santa", "madre", "hermana"}
+_MALE_TITLES = {"sr", "sr.", "señor", "don", "dr", "dr.", "doctor", "rey", "príncipe",
+                "principe", "emperador", "san", "santo", "padre", "fray", "hermano"}
+
+
+def detect_gender(name: str) -> str | None:
+    """Detect gender from a character name. Returns 'F', 'M', or None."""
+    words = name.lower().strip().split()
+    if not words:
+        return None
+    first = words[0]
+
+    # Check titles
+    for w in words:
+        if w in _FEMALE_TITLES:
+            return "F"
+        if w in _MALE_TITLES:
+            return "M"
+
+    # Check name lists
+    for w in words[:2]:
+        if w in _FEMALE_NAMES:
+            return "F"
+        if w in _MALE_NAMES:
+            return "M"
+
+    # Heuristic: Spanish name endings
+    if first.endswith("a") or first.endswith("ia") or first.endswith("na"):
+        return "F"
+    if first.endswith("o") or first.endswith("os") or first.endswith("ón"):
+        return "M"
+
+    return None
+
+
+def get_voice_for_name(name: str) -> str:
+    """Get the appropriate default voice ID for a character name."""
+    gender = detect_gender(name)
+    return DEFAULT_FEMALE_VOICE if gender == "F" else DEFAULT_MALE_VOICE
