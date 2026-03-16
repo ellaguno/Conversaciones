@@ -26,7 +26,7 @@ const googleProvider = getGoogleProvider();
 
 const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
 
-// Paths accessible when guest mode is enabled
+// Paths that guests may access — the page/API itself checks guestEnabled
 const GUEST_PATHS = ['/', '/api/token', '/api/auth/guest-config'];
 
 const config: NextAuthConfig = {
@@ -126,15 +126,9 @@ const config: NextAuthConfig = {
         return true;
       }
 
-      // Allow guest paths when guest mode is enabled
+      // Allow guest-eligible paths without auth — the page/API checks guestEnabled
       if (!isLoggedIn && GUEST_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
-        try {
-          const settingsFile = join(process.cwd(), '..', 'settings.json');
-          if (existsSync(settingsFile)) {
-            const settings = JSON.parse(readFileSync(settingsFile, 'utf-8'));
-            if (settings.guestEnabled) return true;
-          }
-        } catch {}
+        return true;
       }
 
       // Protect everything else
