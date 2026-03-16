@@ -68,6 +68,8 @@ interface ServerSettings {
   googleOAuth: GoogleOAuthConfig;
   analysisModel: string;
   requireApproval: boolean;
+  guestEnabled: boolean;
+  guestMinutes: number;
 }
 
 export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewProps) {
@@ -655,6 +657,48 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
                     {serverSettings.requireApproval
                       ? 'Los nuevos usuarios quedan pendientes hasta que un admin los apruebe.'
                       : 'Los nuevos usuarios pueden acceder inmediatamente al registrarse.'}
+                  </p>
+                </div>
+
+                {/* Guest Access */}
+                <div>
+                  <h3 className="text-foreground mb-3 text-xs font-bold tracking-wide uppercase">
+                    Acceso sin cuenta (invitados)
+                  </h3>
+                  <label className="text-foreground flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={serverSettings.guestEnabled}
+                      onChange={(e) =>
+                        setServerSettings({ ...serverSettings, guestEnabled: e.target.checked })
+                      }
+                      className="accent-primary"
+                    />
+                    Permitir uso sin registro
+                  </label>
+                  {serverSettings.guestEnabled && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="text-muted-foreground text-xs">Tiempo limite:</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={serverSettings.guestMinutes}
+                        onChange={(e) =>
+                          setServerSettings({
+                            ...serverSettings,
+                            guestMinutes: parseInt(e.target.value) || 10,
+                          })
+                        }
+                        className="border-border bg-background text-foreground w-16 rounded-lg border px-2 py-1 text-xs focus:outline-none"
+                      />
+                      <span className="text-muted-foreground text-xs">minutos</span>
+                    </div>
+                  )}
+                  <p className="text-muted-foreground mt-1 text-[10px]">
+                    {serverSettings.guestEnabled
+                      ? `Los visitantes pueden probar sin cuenta por ${serverSettings.guestMinutes} min. No incluye historial ni Dra. Ana.`
+                      : 'Los visitantes deben crear cuenta para usar la aplicacion.'}
                   </p>
                 </div>
 

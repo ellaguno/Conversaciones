@@ -22,6 +22,8 @@ export interface AppSettings {
   googleOAuth: GoogleOAuthSettings;
   analysisModel: string;
   requireApproval: boolean;
+  guestEnabled: boolean;
+  guestMinutes: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -29,6 +31,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   googleOAuth: { clientId: '', clientSecret: '' },
   analysisModel: 'anthropic/claude-opus-4.6',
   requireApproval: true,
+  guestEnabled: false,
+  guestMinutes: 10,
 };
 
 export function readSettings(): AppSettings {
@@ -42,6 +46,8 @@ export function readSettings(): AppSettings {
       googleOAuth: { ...DEFAULT_SETTINGS.googleOAuth, ...data.googleOAuth },
       analysisModel: data.analysisModel || DEFAULT_SETTINGS.analysisModel,
       requireApproval: data.requireApproval ?? DEFAULT_SETTINGS.requireApproval,
+      guestEnabled: data.guestEnabled ?? DEFAULT_SETTINGS.guestEnabled,
+      guestMinutes: data.guestMinutes ?? DEFAULT_SETTINGS.guestMinutes,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

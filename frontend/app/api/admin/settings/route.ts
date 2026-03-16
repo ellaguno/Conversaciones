@@ -77,6 +77,14 @@ export async function PUT(req: Request) {
       current.requireApproval = !!body.requireApproval;
     }
 
+    // Update guest access
+    if (body.guestEnabled !== undefined) {
+      current.guestEnabled = !!body.guestEnabled;
+    }
+    if (body.guestMinutes !== undefined) {
+      current.guestMinutes = Math.max(1, Math.min(60, parseInt(body.guestMinutes) || 10));
+    }
+
     writeSettings(current);
     return NextResponse.json({ ok: true });
   } catch (error) {

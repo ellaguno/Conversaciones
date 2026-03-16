@@ -48,6 +48,7 @@ interface ViewControllerProps {
   onAdminPanel?: () => void;
   isAdmin?: boolean;
   initialPatientId?: string;
+  isGuest?: boolean;
 }
 
 export function ViewController({
@@ -64,6 +65,7 @@ export function ViewController({
   onAdminPanel,
   isAdmin,
   initialPatientId,
+  isGuest,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
@@ -138,14 +140,15 @@ export function ViewController({
           selectedPersonality={selectedPersonality}
           onSelectPersonality={onSelectPersonality}
           onStartCall={onStartCall}
-          onViewNotes={() => setShowNotes(true)}
-          onViewConversations={(p: string) => setShowConversations(p)}
-          onTranscribe={() => setShowTranscribe(true)}
-          onOpenSettings={onOpenSettings}
-          onLogout={onLogout}
-          onAdminPanel={onAdminPanel}
-          isAdmin={isAdmin}
+          onViewNotes={isGuest ? undefined : () => setShowNotes(true)}
+          onViewConversations={isGuest ? undefined : (p: string) => setShowConversations(p)}
+          onTranscribe={isGuest ? undefined : () => setShowTranscribe(true)}
+          onOpenSettings={isGuest ? undefined : onOpenSettings}
+          onLogout={isGuest ? undefined : onLogout}
+          onAdminPanel={isGuest ? undefined : onAdminPanel}
+          isAdmin={isGuest ? false : isAdmin}
           initialPatientId={initialPatientId}
+          isGuest={isGuest}
         />
       )}
       {isConnected && (

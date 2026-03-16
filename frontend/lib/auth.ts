@@ -26,6 +26,9 @@ const googleProvider = getGoogleProvider();
 
 const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
 
+// Paths accessible when guest mode is enabled
+const GUEST_PATHS = ['/', '/api/token', '/api/auth/guest-config'];
+
 const config: NextAuthConfig = {
   providers: [
     Credentials({
@@ -121,6 +124,17 @@ const config: NextAuthConfig = {
       // In development without AUTH_ENABLED, skip auth
       if (process.env.NODE_ENV === 'development' && process.env.AUTH_ENABLED !== 'true') {
         return true;
+      }
+
+      // Allow guest paths when guest mode is enabled
+      if (!isLoggedIn && GUEST_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+        try {
+          const settingsFile = join(process.cwd(), '..', 'settings.json');
+          if (existsSync(settingsFile)) {
+            const settings = JSON.parse(readFileSync(settingsFile, 'utf-8'));
+            if (settings.guestEnabled) return true;
+          }
+        } catch {}
       }
 
       // Protect everything else

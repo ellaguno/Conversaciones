@@ -7,6 +7,7 @@ import {
 } from 'livekit-server-sdk';
 import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { readSettings } from '@/lib/settings';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -63,19 +64,31 @@ export async function POST(req: Request) {
       return new NextResponse('Too Many Requests', { status: 429 });
     }
 
-    // Get authenticated user
+    // Get authenticated user or allow guest
     const session = await auth();
-    if (!session?.user?.id) {
-      return new NextResponse('No autenticado', { status: 401 });
+    let userId = session?.user?.id || '';
+    let isGuest = false;
+
+    if (!userId) {
+      const settings = readSettings();
+      if (!settings.guestEnabled) {
+        return new NextResponse('No autenticado', { status: 401 });
+      }
+      userId = `guest_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      isGuest = true;
     }
-    const userId = session.user.id;
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
       throw new Error('LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET must be defined');
     }
 
     const body = await req.json().catch(() => ({}));
-    const rawPersonality = body?.personality || 'trader';
+    let rawPersonality = body?.personality || 'trader';
+
+    // Guests cannot use psicologo (requires session management)
+    if (isGuest && rawPersonality === 'psicologo') {
+      rawPersonality = 'trader';
+    }
     // Accept known personalities or custom_* keys
     const isCustom =
       typeof rawPersonality === 'string' && /^custom_[a-z0-9_-]+$/.test(rawPersonality);

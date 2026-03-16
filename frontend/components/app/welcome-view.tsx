@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 const ALL_PERSONALITY_CATEGORIES = [
@@ -71,9 +72,9 @@ export function savePersonalityLayout(layout: PersonalityLayout) {
 }
 
 function getVisiblePersonalities(layout: PersonalityLayout) {
-  return ALL_PERSONALITY_CATEGORIES
-    .filter((p) => layout[p.key] && layout[p.key] > 0)
-    .sort((a, b) => (layout[a.key] || 99) - (layout[b.key] || 99));
+  return ALL_PERSONALITY_CATEGORIES.filter((p) => layout[p.key] && layout[p.key] > 0).sort(
+    (a, b) => (layout[a.key] || 99) - (layout[b.key] || 99)
+  );
 }
 
 const DEFAULT_FAMOUS_CHARACTERS = [
@@ -250,6 +251,7 @@ interface WelcomeViewProps {
   onAdminPanel?: () => void;
   isAdmin?: boolean;
   initialPatientId?: string;
+  isGuest?: boolean;
 }
 
 export const WelcomeView = ({
@@ -265,6 +267,7 @@ export const WelcomeView = ({
   onAdminPanel,
   isAdmin,
   initialPatientId,
+  isGuest,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [personalityLayout, setPersonalityLayout] = useState<PersonalityLayout>(DEFAULT_LAYOUT);
@@ -363,7 +366,7 @@ export const WelcomeView = ({
   }, [selectedPersonality, selectedPatientId]);
 
   const isGenerating = useGeneratingStatus();
-  const isPsicologo = selectedPersonality === 'psicologo';
+  const isPsicologo = selectedPersonality === 'psicologo' && !isGuest;
   const isEspiritual = selectedPersonality === 'espiritual';
   const isNormal = selectedPersonality === 'normal';
   const isAbogado = selectedPersonality === 'abogado';
@@ -444,21 +447,23 @@ export const WelcomeView = ({
         )}
 
         <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
-          {visiblePersonalities.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => onSelectPersonality(p.key)}
-              className={`flex flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all ${
-                selectedPersonality === p.key
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/10 shadow-md'
-                  : 'border-border hover:border-muted-foreground/50'
-              }`}
-            >
-              <span className="mb-1 text-xl">{p.emoji}</span>
-              <span className="text-foreground text-xs font-semibold">{p.name}</span>
-              <span className="text-muted-foreground text-[10px]">{p.description}</span>
-            </button>
-          ))}
+          {visiblePersonalities
+            .filter((p) => !(isGuest && p.key === 'psicologo'))
+            .map((p) => (
+              <button
+                key={p.key}
+                onClick={() => onSelectPersonality(p.key)}
+                className={`flex flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all ${
+                  selectedPersonality === p.key
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 shadow-md'
+                    : 'border-border hover:border-muted-foreground/50'
+                }`}
+              >
+                <span className="mb-1 text-xl">{p.emoji}</span>
+                <span className="text-foreground text-xs font-semibold">{p.name}</span>
+                <span className="text-muted-foreground text-[10px]">{p.description}</span>
+              </button>
+            ))}
         </div>
 
         {/* Famous character selector */}
@@ -877,39 +882,68 @@ export const WelcomeView = ({
           )}
         </div>
 
+        {/* Guest banner */}
+        {isGuest && (
+          <div className="mt-4 w-full max-w-md rounded-xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/5 px-4 py-3 text-center">
+            <p className="text-foreground text-xs font-medium">
+              Estas en modo de prueba.{' '}
+              <Link href="/register" className="font-bold text-[var(--accent)] underline">
+                Crea tu cuenta
+              </Link>{' '}
+              para tiempo ilimitado e historial de conversaciones.
+            </p>
+          </div>
+        )}
+
         {/* Settings, admin & logout links */}
         <div className="mt-4 flex items-center gap-4">
-          {onTranscribe && (
-            <button
-              onClick={onTranscribe}
-              className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
-            >
-              Transcribir audio
-            </button>
-          )}
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
-            >
-              Configuracion
-            </button>
-          )}
-          {isAdmin && onAdminPanel && (
-            <button
-              onClick={onAdminPanel}
-              className="text-muted-foreground text-xs underline transition-colors hover:text-amber-600 dark:hover:text-amber-400"
-            >
-              Usuarios
-            </button>
-          )}
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="text-muted-foreground text-xs underline transition-colors hover:text-red-500"
-            >
-              Salir
-            </button>
+          {isGuest ? (
+            <>
+              <Link href="/register" className="text-xs font-bold text-[var(--accent)] underline">
+                Crear cuenta
+              </Link>
+              <Link
+                href="/login"
+                className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+              >
+                Iniciar sesion
+              </Link>
+            </>
+          ) : (
+            <>
+              {onTranscribe && (
+                <button
+                  onClick={onTranscribe}
+                  className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+                >
+                  Transcribir audio
+                </button>
+              )}
+              {onOpenSettings && (
+                <button
+                  onClick={onOpenSettings}
+                  className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+                >
+                  Configuracion
+                </button>
+              )}
+              {isAdmin && onAdminPanel && (
+                <button
+                  onClick={onAdminPanel}
+                  className="text-muted-foreground text-xs underline transition-colors hover:text-amber-600 dark:hover:text-amber-400"
+                >
+                  Usuarios
+                </button>
+              )}
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="text-muted-foreground text-xs underline transition-colors hover:text-red-500"
+                >
+                  Salir
+                </button>
+              )}
+            </>
           )}
         </div>
         <span className="text-muted-foreground mt-4 text-[10px]">
