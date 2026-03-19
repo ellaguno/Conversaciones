@@ -143,7 +143,7 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
-    const { id, displayName, password, role } = body;
+    const { id, displayName, email, password, role } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
@@ -158,6 +158,7 @@ export async function PUT(req: Request) {
 
     updateUser(id, {
       ...(displayName !== undefined && { displayName }),
+      ...(email !== undefined && { email: email || '' }),
       ...(password && { password }),
       ...(role !== undefined && { role }),
     });

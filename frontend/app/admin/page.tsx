@@ -63,6 +63,7 @@ export default function AdminPage() {
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
   const [saving, setSaving] = useState(false);
@@ -132,6 +133,7 @@ export default function AdminPage() {
   const handleEdit = (user: UserPublic) => {
     setEditingId(user.id);
     setEditDisplayName(user.displayName);
+    setEditEmail(user.email || '');
     setEditPassword('');
     setEditRole(user.role);
   };
@@ -147,6 +149,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           id: editingId,
           displayName: editDisplayName,
+          email: editEmail || undefined,
           ...(editPassword && { password: editPassword }),
           role: editRole,
         }),
@@ -348,7 +351,15 @@ export default function AdminPage() {
                           type="text"
                           value={editDisplayName}
                           onChange={(e) => setEditDisplayName(e.target.value)}
-                          className="border-border bg-background text-foreground w-full rounded border px-2 py-1 text-sm focus:outline-none"
+                          placeholder="Nombre"
+                          className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded border px-2 py-1 text-sm focus:outline-none"
+                        />
+                        <input
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          placeholder="Correo electronico"
+                          className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-1 w-full rounded border px-2 py-1 text-xs focus:outline-none"
                         />
                         <input
                           type="password"
