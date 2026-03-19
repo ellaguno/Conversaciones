@@ -306,29 +306,29 @@ export default function AdminPage() {
         </div>
 
         {/* Users table */}
-        <div className="border-border bg-card overflow-hidden rounded-xl border">
-          <table className="w-full">
+        <div className="border-border bg-card overflow-hidden overflow-x-auto rounded-xl border">
+          <table className="w-full table-fixed">
             <thead>
               <tr className="border-border border-b">
-                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
+                <th className="text-muted-foreground w-[22%] px-3 py-3 text-left text-xs font-semibold uppercase">
                   Usuario
                 </th>
-                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
+                <th className="text-muted-foreground w-[18%] px-3 py-3 text-left text-xs font-semibold uppercase">
                   Nombre
                 </th>
-                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
+                <th className="text-muted-foreground w-[10%] px-3 py-3 text-left text-xs font-semibold uppercase">
                   Rol
                 </th>
-                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-semibold uppercase">
+                <th className="text-muted-foreground w-[12%] px-3 py-3 text-left text-xs font-semibold uppercase">
                   Estado
                 </th>
-                <th className="text-muted-foreground hidden px-4 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
+                <th className="text-muted-foreground hidden w-[10%] px-3 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
                   Login
                 </th>
-                <th className="text-muted-foreground hidden px-4 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
+                <th className="text-muted-foreground hidden w-[12%] px-3 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
                   Ultimo uso
                 </th>
-                <th className="text-muted-foreground px-4 py-3 text-right text-xs font-semibold uppercase">
+                <th className="text-muted-foreground w-[16%] px-3 py-3 text-right text-xs font-semibold uppercase">
                   Acciones
                 </th>
               </tr>
@@ -415,16 +415,25 @@ export default function AdminPage() {
                     </>
                   ) : (
                     <>
-                      <td className="px-4 py-3">
-                        <span className="text-foreground font-mono text-sm">{user.username}</span>
+                      <td className="px-3 py-3">
+                        <span className="text-foreground block truncate font-mono text-sm">
+                          {user.username}
+                        </span>
                         {user.email && (
-                          <p className="text-muted-foreground text-[10px]">{user.email}</p>
+                          <p
+                            className="text-muted-foreground truncate text-[10px]"
+                            title={user.email}
+                          >
+                            {user.email}
+                          </p>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-foreground text-sm">{user.displayName}</span>
+                      <td className="px-3 py-3">
+                        <span className="text-foreground block truncate text-sm">
+                          {user.displayName}
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                             user.role === 'admin'
@@ -435,7 +444,7 @@ export default function AdminPage() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                             (user.status || 'active') === 'active'
@@ -452,17 +461,17 @@ export default function AdminPage() {
                               : 'Rechazado'}
                         </span>
                       </td>
-                      <td className="hidden px-4 py-3 sm:table-cell">
+                      <td className="hidden px-3 py-3 sm:table-cell">
                         <span className="text-muted-foreground text-xs">
                           {formatRelativeTime(user.lastActive)}
                         </span>
                       </td>
-                      <td className="hidden px-4 py-3 sm:table-cell">
+                      <td className="hidden px-3 py-3 sm:table-cell">
                         <span className="text-muted-foreground text-xs">
                           {formatRelativeTime(user.lastUsage)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-3 text-right">
                         <div className="flex justify-end gap-1">
                           {user.status === 'pending' && (
                             <>
