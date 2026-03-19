@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { auth } from '@/lib/auth';
 import { getUserConversationsDir } from '@/lib/data-paths';
@@ -36,19 +36,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Ruta invalida' }, { status: 400 });
     }
 
-    // If no specific filename, get the most recent transcript
+    // If no specific filename, get the most recent transcript.
+    // The agent may still be saving the file, so retry a few times.
     let targetFile: string;
     if (filename) {
       const safeFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
       targetFile = join(personalityDir, safeFilename);
     } else {
-      if (!existsSync(personalityDir)) {
-        return NextResponse.json({ error: 'No hay conversaciones' }, { status: 404 });
+      let files: string[] = [];
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (existsSync(personalityDir)) {
+          files = readdirSync(personalityDir)
+            .filter((f: string) => f.endsWith('.md') && f !== 'summary.md')
+            .sort()
+            .reverse();
+        }
+        if (files.length > 0) break;
+        // Wait 2s before retrying (agent may still be saving)
+        await new Promise((r) => setTimeout(r, 2000));
       }
-      const files = readdirSync(personalityDir)
-        .filter((f: string) => f.endsWith('.md') && f !== 'summary.md')
-        .sort()
-        .reverse();
       if (files.length === 0) {
         return NextResponse.json({ error: 'No hay conversaciones' }, { status: 404 });
       }

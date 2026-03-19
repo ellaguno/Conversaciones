@@ -48,6 +48,39 @@ function PostSessionView({
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [ready, setReady] = useState(false);
+
+  // Poll to check if the transcript file is ready
+  useEffect(() => {
+    if (isGuest) return;
+    let cancelled = false;
+    const check = async () => {
+      for (let i = 0; i < 10; i++) {
+        if (cancelled) return;
+        try {
+          const res = await fetch(
+            `/api/conversations?personality=${encodeURIComponent(personalityKey)}&check=1`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.count > 0) {
+              setReady(true);
+              return;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      // After 20s assume it's ready (or failed)
+      setReady(true);
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [personalityKey, isGuest]);
 
   const handleEmail = useCallback(async () => {
     setSending(true);
@@ -85,6 +118,10 @@ function PostSessionView({
           <div className="space-y-2">
             {sent ? (
               <p className="text-sm text-green-600">Correo enviado correctamente</p>
+            ) : !ready ? (
+              <p className="text-muted-foreground animate-pulse text-xs">
+                Guardando transcripcion...
+              </p>
             ) : (
               <button
                 onClick={handleEmail}

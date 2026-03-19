@@ -32,6 +32,19 @@ export async function GET(req: Request) {
     const userId = session.user.id;
     const conversationsBase = getUserConversationsDir(userId);
 
+    // Quick check: does a specific personality have any transcripts?
+    const url = new URL(req.url);
+    const checkPersonality = url.searchParams.get('personality');
+    if (checkPersonality && url.searchParams.get('check')) {
+      const safeKey = checkPersonality.replace(/[^a-zA-Z0-9_-]/g, '');
+      const dir = join(conversationsBase, safeKey);
+      let count = 0;
+      if (existsSync(dir)) {
+        count = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'summary.md').length;
+      }
+      return NextResponse.json({ count });
+    }
+
     if (!existsSync(conversationsBase)) {
       return NextResponse.json({ personalities: [] });
     }
