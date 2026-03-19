@@ -14,9 +14,18 @@ interface UserPublic {
   email?: string;
   status?: 'active' | 'pending' | 'rejected';
   lastActive?: string;
+  lastUsage?: string;
 }
 
-function formatRelativeTime(isoDate?: string): string {
+interface GuestUser {
+  id: string;
+  ip: string;
+  lastUsage: string | null;
+  totalCost: number;
+  conversations: number;
+}
+
+function formatRelativeTime(isoDate?: string | null): string {
   if (!isoDate) return 'Nunca';
   const date = new Date(isoDate);
   const now = new Date();
@@ -37,6 +46,7 @@ export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [users, setUsers] = useState<UserPublic[]>([]);
+  const [guests, setGuests] = useState<GuestUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<FilterTab>('all');
@@ -69,6 +79,7 @@ export default function AdminPage() {
       }
       const data = await res.json();
       setUsers(data.users || []);
+      setGuests(data.guests || []);
     } catch {
       setError('Error cargando usuarios');
     } finally {
@@ -312,6 +323,9 @@ export default function AdminPage() {
                   Estado
                 </th>
                 <th className="text-muted-foreground hidden px-4 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
+                  Login
+                </th>
+                <th className="text-muted-foreground hidden px-4 py-3 text-left text-xs font-semibold uppercase sm:table-cell">
                   Ultimo uso
                 </th>
                 <th className="text-muted-foreground px-4 py-3 text-right text-xs font-semibold uppercase">
@@ -355,6 +369,7 @@ export default function AdminPage() {
                         </select>
                       </td>
                       <td className="px-4 py-3" />
+                      <td className="hidden px-4 py-3 sm:table-cell" />
                       <td className="hidden px-4 py-3 sm:table-cell" />
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
@@ -442,6 +457,11 @@ export default function AdminPage() {
                           {formatRelativeTime(user.lastActive)}
                         </span>
                       </td>
+                      <td className="hidden px-4 py-3 sm:table-cell">
+                        <span className="text-muted-foreground text-xs">
+                          {formatRelativeTime(user.lastUsage)}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
                           {user.status === 'pending' && (
@@ -501,6 +521,60 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Guest users section */}
+        {guests.length > 0 && (
+          <div className="border-border bg-card mt-4 overflow-hidden rounded-xl border">
+            <div className="border-border border-b px-4 py-3">
+              <h2 className="text-foreground text-sm font-bold">
+                Usuarios sin cuenta ({guests.length})
+              </h2>
+              <p className="text-muted-foreground text-[10px]">
+                Visitantes que usaron la app sin registrarse
+              </p>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-border border-b">
+                  <th className="text-muted-foreground px-4 py-2 text-left text-xs font-semibold uppercase">
+                    IP
+                  </th>
+                  <th className="text-muted-foreground px-4 py-2 text-left text-xs font-semibold uppercase">
+                    Ultimo uso
+                  </th>
+                  <th className="text-muted-foreground px-4 py-2 text-right text-xs font-semibold uppercase">
+                    Llamadas
+                  </th>
+                  <th className="text-muted-foreground px-4 py-2 text-right text-xs font-semibold uppercase">
+                    Costo
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {guests.map((g) => (
+                  <tr key={g.id} className="border-border border-b last:border-0">
+                    <td className="px-4 py-2">
+                      <span className="text-foreground font-mono text-xs">{g.ip}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-muted-foreground text-xs">
+                        {formatRelativeTime(g.lastUsage)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span className="text-muted-foreground text-xs">{g.conversations}</span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span className="text-muted-foreground font-mono text-xs">
+                        ${g.totalCost.toFixed(4)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Create user form */}
         {showCreate ? (

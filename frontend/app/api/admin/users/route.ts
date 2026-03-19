@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { createUser, deleteUser, getUsers, updateUser } from '@/lib/users';
@@ -16,13 +18,73 @@ async function requireAdmin(req: Request): Promise<NextResponse | null> {
   return null;
 }
 
+const DATA_DIR = join(process.cwd(), '..', 'data');
+
+/** Get last usage time for a user by checking their metrics.json mtime */
+function getLastUsage(userId: string): string | null {
+  try {
+    const safeId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const metricsFile = join(DATA_DIR, safeId, 'metrics.json');
+    if (existsSync(metricsFile)) {
+      const stat = statSync(metricsFile);
+      return stat.mtime.toISOString();
+    }
+  } catch {}
+  return null;
+}
+
+/** Get metrics summary for a user */
+function getMetricsSummary(userId: string): { totalCost: number; conversations: number } | null {
+  try {
+    const safeId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const metricsFile = join(DATA_DIR, safeId, 'metrics.json');
+    if (existsSync(metricsFile)) {
+      const data = JSON.parse(readFileSync(metricsFile, 'utf-8'));
+      return {
+        totalCost: data.total_cost_usd || 0,
+        conversations: data.llm_calls || 0,
+      };
+    }
+  } catch {}
+  return null;
+}
+
+/** List guest user folders from data directory */
+function getGuestUsers() {
+  try {
+    if (!existsSync(DATA_DIR)) return [];
+    return readdirSync(DATA_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('guest_'))
+      .map((d) => {
+        const ip = d.name.replace('guest_', '').replace(/_/g, '.');
+        const lastUsage = getLastUsage(d.name);
+        const metrics = getMetricsSummary(d.name);
+        return {
+          id: d.name,
+          ip,
+          lastUsage,
+          totalCost: metrics?.totalCost || 0,
+          conversations: metrics?.conversations || 0,
+        };
+      })
+      .filter((g) => g.lastUsage !== null) // Only show guests that actually used the app
+      .sort((a, b) => (b.lastUsage || '').localeCompare(a.lastUsage || ''));
+  } catch {
+    return [];
+  }
+}
+
 // List all users
 export async function GET(req: Request) {
   const denied = await requireAdmin(req);
   if (denied) return denied;
 
-  const users = getUsers();
-  return NextResponse.json({ users });
+  const users = getUsers().map((u) => ({
+    ...u,
+    lastUsage: getLastUsage(u.id),
+  }));
+  const guests = getGuestUsers();
+  return NextResponse.json({ users, guests });
 }
 
 // Create a user
