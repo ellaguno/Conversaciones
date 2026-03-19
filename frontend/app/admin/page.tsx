@@ -341,48 +341,65 @@ export default function AdminPage() {
                 <tr key={user.id} className="border-border border-b last:border-0">
                   {editingId === user.id ? (
                     <>
-                      <td className="px-4 py-3">
-                        <span className="text-muted-foreground font-mono text-sm">
-                          {user.username}
-                        </span>
+                      <td colSpan={6} className="px-3 py-3">
+                        <div className="space-y-2">
+                          <div className="text-muted-foreground mb-1 font-mono text-xs">
+                            Editando: <strong>{user.username}</strong>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-muted-foreground mb-0.5 block text-[10px] uppercase">
+                                Nombre
+                              </label>
+                              <input
+                                type="text"
+                                value={editDisplayName}
+                                onChange={(e) => setEditDisplayName(e.target.value)}
+                                placeholder="Nombre"
+                                className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded border px-2 py-1.5 text-sm focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-muted-foreground mb-0.5 block text-[10px] uppercase">
+                                Correo
+                              </label>
+                              <input
+                                type="email"
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                placeholder="correo@ejemplo.com"
+                                className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded border px-2 py-1.5 text-sm focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-muted-foreground mb-0.5 block text-[10px] uppercase">
+                                Contraseña
+                              </label>
+                              <input
+                                type="password"
+                                value={editPassword}
+                                onChange={(e) => setEditPassword(e.target.value)}
+                                placeholder="Dejar vacio para no cambiar"
+                                className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded border px-2 py-1.5 text-sm focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-muted-foreground mb-0.5 block text-[10px] uppercase">
+                                Rol
+                              </label>
+                              <select
+                                value={editRole}
+                                onChange={(e) => setEditRole(e.target.value as 'admin' | 'user')}
+                                className="border-border bg-background text-foreground w-full rounded border px-2 py-1.5 text-sm focus:outline-none"
+                              >
+                                <option value="user">Usuario</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          value={editDisplayName}
-                          onChange={(e) => setEditDisplayName(e.target.value)}
-                          placeholder="Nombre"
-                          className="border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded border px-2 py-1 text-sm focus:outline-none"
-                        />
-                        <input
-                          type="email"
-                          value={editEmail}
-                          onChange={(e) => setEditEmail(e.target.value)}
-                          placeholder="Correo electronico"
-                          className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-1 w-full rounded border px-2 py-1 text-xs focus:outline-none"
-                        />
-                        <input
-                          type="password"
-                          value={editPassword}
-                          onChange={(e) => setEditPassword(e.target.value)}
-                          placeholder="Nueva contraseña (dejar vacio para no cambiar)"
-                          className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-1 w-full rounded border px-2 py-1 text-xs focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value as 'admin' | 'user')}
-                          className="border-border bg-background text-foreground rounded border px-2 py-1 text-sm focus:outline-none"
-                        >
-                          <option value="user">Usuario</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3" />
-                      <td className="hidden px-4 py-3 sm:table-cell" />
-                      <td className="hidden px-4 py-3 sm:table-cell" />
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-3 text-right">
                         <div className="flex justify-end gap-1">
                           <button
                             onClick={handleSaveEdit}
