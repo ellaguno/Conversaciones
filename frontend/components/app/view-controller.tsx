@@ -49,11 +49,26 @@ function PostSessionView({
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
-  // Poll to check if the transcript file is ready
+  // Fetch user email + poll for transcript readiness
   useEffect(() => {
     if (isGuest) return;
     let cancelled = false;
+
+    // Fetch email
+    fetch('/api/auth/profile')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setUserEmail(data.email || '');
+      })
+      .catch(() => {
+        if (!cancelled) setUserEmail('');
+      });
+
+    // Poll transcript
     const check = async () => {
       for (let i = 0; i < 10; i++) {
         if (cancelled) return;
@@ -73,7 +88,6 @@ function PostSessionView({
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      // After 20s assume it's ready (or failed)
       setReady(true);
     };
     check();
@@ -81,6 +95,26 @@ function PostSessionView({
       cancelled = true;
     };
   }, [personalityKey, isGuest]);
+
+  const handleSaveEmailAndSend = useCallback(async () => {
+    if (!emailInput.includes('@')) return;
+    setSavingEmail(true);
+    setError('');
+    try {
+      // Save email to profile
+      await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      setUserEmail(emailInput);
+    } catch {
+      setError('Error al guardar correo');
+      setSavingEmail(false);
+      return;
+    }
+    setSavingEmail(false);
+  }, [emailInput]);
 
   const handleEmail = useCallback(async () => {
     setSending(true);
@@ -106,6 +140,8 @@ function PostSessionView({
     }
   }, [personalityKey, personalityName]);
 
+  const hasEmail = !!userEmail;
+
   return (
     <div className="bg-background flex min-h-svh items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-5 text-center">
@@ -122,13 +158,35 @@ function PostSessionView({
               <p className="text-muted-foreground animate-pulse text-xs">
                 Guardando transcripcion...
               </p>
+            ) : userEmail === null ? null : !hasEmail ? (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs">
+                  Ingresa tu correo para recibir la transcripcion:
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="tu@correo.com"
+                    className="border-border bg-background text-foreground placeholder:text-muted-foreground flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSaveEmailAndSend}
+                    disabled={savingEmail || !emailInput.includes('@')}
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/80 shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase disabled:opacity-50"
+                  >
+                    {savingEmail ? '...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
             ) : (
               <button
                 onClick={handleEmail}
                 disabled={sending}
                 className="bg-secondary text-secondary-foreground hover:bg-secondary/80 w-full rounded-full px-6 py-2.5 font-mono text-xs font-bold uppercase disabled:opacity-50"
               >
-                {sending ? 'Enviando...' : 'Enviar transcripcion por correo'}
+                {sending ? 'Enviando...' : `Enviar a ${userEmail}`}
               </button>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
