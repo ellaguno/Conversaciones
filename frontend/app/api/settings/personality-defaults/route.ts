@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { readPersonalityDefaults, writePersonalityDefaults } from '@/lib/settings';
+import {
+  readLayoutDefaults,
+  readPersonalityDefaults,
+  writeLayoutDefaults,
+  writePersonalityDefaults,
+} from '@/lib/settings';
 
 // Public: anyone can read admin defaults
 export async function GET(req: Request) {
@@ -11,7 +16,8 @@ export async function GET(req: Request) {
   }
 
   const defaults = readPersonalityDefaults();
-  return NextResponse.json({ defaults });
+  const layoutDefaults = readLayoutDefaults();
+  return NextResponse.json({ defaults, layoutDefaults });
 }
 
 // Admin only: save personality defaults
@@ -28,6 +34,11 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
+    // If body has __layout__ key, save layout separately
+    if (body.__layout__) {
+      writeLayoutDefaults(body.__layout__);
+      return NextResponse.json({ ok: true });
+    }
     writePersonalityDefaults(body);
     return NextResponse.json({ ok: true });
   } catch {

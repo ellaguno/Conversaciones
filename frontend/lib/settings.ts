@@ -82,5 +82,24 @@ export function readPersonalityDefaults(): Record<string, unknown> | null {
 }
 
 export function writePersonalityDefaults(defaults: Record<string, unknown>): void {
-  writeFileSync(PERSONALITY_DEFAULTS_FILE, JSON.stringify(defaults, null, 2), 'utf-8');
+  // Preserve existing layout defaults when saving personality configs
+  const existing = readPersonalityDefaults() as Record<string, unknown> | null;
+  const layout = existing?.['__layout__'];
+  const toSave = { ...defaults };
+  if (layout && !toSave['__layout__']) {
+    toSave['__layout__'] = layout;
+  }
+  writeFileSync(PERSONALITY_DEFAULTS_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
+}
+
+export function readLayoutDefaults(): Record<string, number> | null {
+  const defaults = readPersonalityDefaults() as Record<string, unknown> | null;
+  if (!defaults?.['__layout__']) return null;
+  return defaults['__layout__'] as Record<string, number>;
+}
+
+export function writeLayoutDefaults(layout: Record<string, number>): void {
+  const existing = readPersonalityDefaults() || {};
+  (existing as Record<string, unknown>)['__layout__'] = layout;
+  writeFileSync(PERSONALITY_DEFAULTS_FILE, JSON.stringify(existing, null, 2), 'utf-8');
 }

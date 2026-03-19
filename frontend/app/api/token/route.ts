@@ -59,6 +59,16 @@ const VALID_PERSONALITIES = new Set([
   'asesor_office',
   'asesor_web',
   'asesor_tecnico',
+  'coach_oratoria',
+  'instructor_ventas',
+  'instructor_entrevistas',
+  'instructor_historia',
+  'instructor_meditacion',
+  'instructor_salud',
+  'nutriologo',
+  'nutriologo_deportivo',
+  'nutriologo_pediatrico',
+  'nutriologo_bariatrico',
 ]);
 
 export const revalidate = 0;
@@ -105,6 +115,7 @@ export async function POST(req: Request) {
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
     const voiceId = body?.voiceId || '';
     const temperature = typeof body?.temperature === 'number' ? body.temperature : null;
+    const speed = typeof body?.speed === 'number' ? body.speed : null;
     const model = typeof body?.model === 'string' ? body.model : '';
     const therapyMethod = typeof body?.therapyMethod === 'string' ? body.therapyMethod : '';
     const coupleTherapy = body?.coupleTherapy === true;
@@ -125,6 +136,7 @@ export async function POST(req: Request) {
       userId,
       ...(voiceId && { voiceId }),
       ...(temperature !== null && { temperature }),
+      ...(speed !== null && { speed }),
       ...(model && { model }),
       ...(therapyMethod && { therapyMethod }),
       ...(coupleTherapy && { coupleTherapy }),

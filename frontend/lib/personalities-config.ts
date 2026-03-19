@@ -388,6 +388,7 @@ export interface PersonalityConfig {
   voiceId: string;
   visualizer: VisualizerType;
   temperature: number; // 0.0 - 1.0
+  speed: number; // 0.6 - 2.0 (Cartesia TTS speech speed, 1.0 = normal)
   model: string; // OpenRouter model ID
 }
 
@@ -397,6 +398,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   trader_bolsa: {
@@ -404,6 +406,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   trader_crypto: {
@@ -411,6 +414,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   trader_forex: {
@@ -418,6 +422,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   trader_dinero: {
@@ -425,6 +430,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   trader_commodities: {
@@ -432,6 +438,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado: {
@@ -439,6 +446,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_corporativo: {
@@ -446,6 +454,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_laboral: {
@@ -453,6 +462,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_fiscal: {
@@ -460,6 +470,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_penal: {
@@ -467,6 +478,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_familiar: {
@@ -474,6 +486,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   abogado_inmobiliario: {
@@ -481,6 +494,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'bar',
     temperature: 0.4,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   psicologo: {
@@ -488,6 +502,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
     visualizer: 'aura',
     temperature: 0.6,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   hippy: {
@@ -495,6 +510,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'wave',
     temperature: 0.9,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   normal: {
@@ -502,6 +518,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '7b001dff-b8b2-4da7-92e4-5c794798effa',
     visualizer: 'bar',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   tesla: {
@@ -509,6 +526,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'grid',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   jesus: {
@@ -516,6 +534,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '5ef98b2a-68d2-4a35-ac52-632a2d288ea6',
     visualizer: 'aura',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   aquino: {
@@ -523,6 +542,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'radial',
     temperature: 0.5,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   francisco: {
@@ -530,6 +550,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'aura',
     temperature: 0.8,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   suntzu: {
@@ -537,6 +558,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'radial',
     temperature: 0.5,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   estoico: {
@@ -544,6 +566,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1',
     visualizer: 'radial',
     temperature: 0.5,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   sacerdote: {
@@ -551,6 +574,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '5ef98b2a-68d2-4a35-ac52-632a2d288ea6',
     visualizer: 'aura',
     temperature: 0.6,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   monje: {
@@ -558,6 +582,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'aura',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   imam: {
@@ -565,6 +590,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'radial',
     temperature: 0.6,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   rabino: {
@@ -572,6 +598,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '2695b6b5-5543-4be1-96d9-3967fb5e7fec',
     visualizer: 'radial',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   pandit: {
@@ -579,6 +606,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'aura',
     temperature: 0.7,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   curie: {
@@ -586,6 +614,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
     visualizer: 'radial',
     temperature: 0.6,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   vangogh: {
@@ -593,6 +622,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
     visualizer: 'aura',
     temperature: 0.8,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   hipatia: {
@@ -600,6 +630,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
     visualizer: 'radial',
     temperature: 0.6,
+    speed: 1.0,
     model: DEFAULT_MODEL,
   },
   // Maestros de Idiomas
@@ -608,6 +639,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'ccfea4bf-b3f4-421e-87ed-dd05dae01431',
     visualizer: 'wave',
     temperature: 0.7,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   maestro_frances: {
@@ -615,6 +647,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
     visualizer: 'wave',
     temperature: 0.7,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   maestro_portugues: {
@@ -622,6 +655,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '399002e9-7f7d-42d4-a6a8-9b91bd809b9d',
     visualizer: 'wave',
     temperature: 0.7,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   maestro_aleman: {
@@ -629,6 +663,89 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
     visualizer: 'wave',
     temperature: 0.7,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  // Instructores
+  coach_oratoria: {
+    name: 'Coach Ricardo',
+    voiceId: '399002e9-7f7d-42d4-a6a8-9b91bd809b9d', // Diego - Entusiasta
+    visualizer: 'wave',
+    temperature: 0.7,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  instructor_ventas: {
+    name: 'Coach de Ventas',
+    voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565', // Manuel - Presentador
+    visualizer: 'bar',
+    temperature: 0.7,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  instructor_entrevistas: {
+    name: 'Preparador de Entrevistas',
+    voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1', // Pedro - Formal
+    visualizer: 'bar',
+    temperature: 0.7,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  instructor_historia: {
+    name: 'Profesor de Historia',
+    voiceId: '2695b6b5-5543-4be1-96d9-3967fb5e7fec', // Agustín - Narrador
+    visualizer: 'wave',
+    temperature: 0.7,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  instructor_meditacion: {
+    name: 'Maestro de Meditación',
+    voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3', // Alejandro - Mentor Calmado
+    visualizer: 'aura',
+    temperature: 0.7,
+    speed: 0.75,
+    model: DEFAULT_MODEL,
+  },
+  instructor_salud: {
+    name: 'Asesor de Salud Integral',
+    voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74', // Javier - Asesor Gentil
+    visualizer: 'bar',
+    temperature: 0.6,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  // Nutriólogos
+  nutriologo: {
+    name: 'Nutrióloga Laura',
+    voiceId: 'ae823354-f9be-4aef-8543-f569644136b4', // Mariana - Guía Maternal
+    visualizer: 'bar',
+    temperature: 0.6,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  nutriologo_deportivo: {
+    name: 'Nutriólogo Deportivo',
+    voiceId: '399002e9-7f7d-42d4-a6a8-9b91bd809b9d', // Diego - Entusiasta
+    visualizer: 'bar',
+    temperature: 0.6,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  nutriologo_pediatrico: {
+    name: 'Nutrióloga Pediátrica',
+    voiceId: 'ae823354-f9be-4aef-8543-f569644136b4', // Mariana - Guía Maternal
+    visualizer: 'bar',
+    temperature: 0.6,
+    speed: 0.85,
+    model: DEFAULT_MODEL,
+  },
+  nutriologo_bariatrico: {
+    name: 'Nutriólogo Bariátrico',
+    voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3', // Alejandro - Mentor Calmado
+    visualizer: 'bar',
+    temperature: 0.6,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   // Asesores de Sistemas (con visión de pantalla)
@@ -637,6 +754,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'grid',
     temperature: 0.5,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   asesor_office: {
@@ -644,6 +762,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'grid',
     temperature: 0.5,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   asesor_web: {
@@ -651,6 +770,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'grid',
     temperature: 0.5,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
   asesor_tecnico: {
@@ -658,6 +778,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     voiceId: 'e9f0368b-3662-4a01-b037-e13ca5203c74',
     visualizer: 'grid',
     temperature: 0.5,
+    speed: 0.85,
     model: DEFAULT_MODEL,
   },
 };
@@ -728,6 +849,7 @@ export function getConfig(
       voiceId,
       visualizer: 'bar',
       temperature: 0.7,
+      speed: 1.0,
       model: DEFAULT_MODEL,
     };
   }

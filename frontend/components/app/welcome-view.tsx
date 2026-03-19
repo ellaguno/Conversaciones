@@ -47,6 +47,18 @@ const ALL_PERSONALITY_CATEGORIES = [
     description: 'Elige una tradición',
     emoji: '🕊️',
   },
+  {
+    key: 'instructor',
+    name: 'Instructor',
+    description: 'Mejora tus habilidades',
+    emoji: '🎯',
+  },
+  {
+    key: 'nutriologa',
+    name: 'Nutrióloga',
+    description: 'Elige una especialidad',
+    emoji: '🥗',
+  },
 ];
 
 // Layout config: maps category key → position (1-6). 0 or absent = hidden.
@@ -60,18 +72,23 @@ const DEFAULT_LAYOUT: PersonalityLayout = {
   asesor: 5,
   normal: 6,
   espiritual: 7,
+  instructor: 8,
+  nutriologa: 9,
 };
 
-export function loadPersonalityLayout(): PersonalityLayout {
-  if (typeof window === 'undefined') return DEFAULT_LAYOUT;
+export function loadPersonalityLayout(
+  adminDefaults?: Record<string, number> | null
+): PersonalityLayout {
+  const base = adminDefaults ? { ...DEFAULT_LAYOUT, ...adminDefaults } : DEFAULT_LAYOUT;
+  if (typeof window === 'undefined') return base;
   try {
     const saved = localStorage.getItem('personality-layout');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...DEFAULT_LAYOUT, ...parsed };
+      return { ...base, ...parsed };
     }
   } catch {}
-  return DEFAULT_LAYOUT;
+  return base;
 }
 
 export function savePersonalityLayout(layout: PersonalityLayout) {
@@ -186,6 +203,38 @@ const SPIRITUAL_GUIDES = [
   { key: 'pandit', name: 'Pandit Hindú' },
 ];
 
+const INSTRUCTORS = [
+  { key: 'coach_oratoria', name: 'Coach de Oratoria' },
+  { key: 'instructor_ventas', name: 'Instructor de Ventas' },
+  { key: 'instructor_entrevistas', name: 'Entrenador de Entrevistas' },
+  { key: 'instructor_historia', name: 'Profesor de Historia' },
+  { key: 'instructor_meditacion', name: 'Maestro de Meditación' },
+  { key: 'instructor_salud', name: 'Asesor de Salud Integral' },
+];
+
+const CUSTOM_INSTRUCTOR_KEY = '__other_instructor__';
+
+function loadCustomInstructors(): { key: string; name: string }[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem('customInstructors');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomInstructors(items: { key: string; name: string }[]) {
+  localStorage.setItem('customInstructors', JSON.stringify(items));
+}
+
+const NUTRITIONIST_SPECIALTIES = [
+  { key: 'nutriologo', name: 'Nutrióloga Clínica (General)' },
+  { key: 'nutriologo_deportivo', name: 'Nutrición Deportiva' },
+  { key: 'nutriologo_pediatrico', name: 'Nutrición Pediátrica' },
+  { key: 'nutriologo_bariatrico', name: 'Nutrición Bariátrica' },
+];
+
 // Reverse map: individual personality key → { category, displayName }
 const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: string }> = (() => {
   const map: Record<string, { category: string; displayName: string }> = {};
@@ -196,6 +245,9 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   for (const g of LAWYER_SPECIALTIES) map[g.key] = { category: 'abogado', displayName: g.name };
   for (const g of TRADER_MARKETS) map[g.key] = { category: 'trader', displayName: g.name };
   for (const g of LANGUAGE_TEACHERS) map[g.key] = { category: 'idiomas', displayName: g.name };
+  for (const g of INSTRUCTORS) map[g.key] = { category: 'instructor', displayName: g.name };
+  for (const g of NUTRITIONIST_SPECIALTIES)
+    map[g.key] = { category: 'nutriologa', displayName: g.name };
   // Category keys map to themselves
   map['psicologo'] = { category: 'psicologo', displayName: 'Dra. Ana - Psicóloga clínica' };
   map['espiritual'] = { category: 'espiritual', displayName: 'Guía Espiritual' };
@@ -204,6 +256,8 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   map['abogado'] = { category: 'abogado', displayName: 'Abogado General' };
   map['trader'] = { category: 'trader', displayName: 'Trader General' };
   map['idiomas'] = { category: 'idiomas', displayName: 'Maestro de Idiomas' };
+  map['instructor'] = { category: 'instructor', displayName: 'Instructor' };
+  map['nutriologa'] = { category: 'nutriologa', displayName: 'Nutrióloga Clínica' };
   return map;
 })();
 
@@ -276,6 +330,7 @@ interface WelcomeViewProps {
   isAdmin?: boolean;
   initialPatientId?: string;
   isGuest?: boolean;
+  adminLayoutDefaults?: Record<string, number> | null;
 }
 
 export const WelcomeView = ({
@@ -292,14 +347,15 @@ export const WelcomeView = ({
   isAdmin,
   initialPatientId,
   isGuest,
+  adminLayoutDefaults,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
   const [personalityLayout, setPersonalityLayout] = useState<PersonalityLayout>(DEFAULT_LAYOUT);
   const visiblePersonalities = getVisiblePersonalities(personalityLayout);
 
   useEffect(() => {
-    setPersonalityLayout(loadPersonalityLayout());
-  }, []);
+    setPersonalityLayout(loadPersonalityLayout(adminLayoutDefaults));
+  }, [adminLayoutDefaults]);
 
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [patients, setPatients] = useState<PatientInfo[]>([]);
@@ -320,11 +376,16 @@ export const WelcomeView = ({
   const [selectedTrader, setSelectedTrader] = useState('trader');
   const [customTraders, setCustomTraders] = useState<{ key: string; name: string }[]>([]);
   const [customTraderName, setCustomTraderName] = useState('');
+  const [selectedInstructor, setSelectedInstructor] = useState('coach_oratoria');
+  const [customInstructors, setCustomInstructors] = useState<{ key: string; name: string }[]>([]);
+  const [customInstructorName, setCustomInstructorName] = useState('');
+  const [selectedNutritionist, setSelectedNutritionist] = useState('nutriologo');
 
   useEffect(() => {
     setCustomCharacters(loadCustomCharacters());
     setCustomLawyers(loadCustomLawyers());
     setCustomTraders(loadCustomTraders());
+    setCustomInstructors(loadCustomInstructors());
   }, []);
   const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
   const [therapyMethod, setTherapyMethod] = useState('mindfulness');
@@ -347,6 +408,8 @@ export const WelcomeView = ({
     else if (category === 'asesor') setSelectedAdvisor(selectedPersonality);
     else if (category === 'abogado') setSelectedLawyer(selectedPersonality);
     else if (category === 'trader') setSelectedTrader(selectedPersonality);
+    else if (category === 'instructor') setSelectedInstructor(selectedPersonality);
+    else if (category === 'nutriologa') setSelectedNutritionist(selectedPersonality);
     // Show banner
     setPreselectedBanner(info.displayName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -399,6 +462,8 @@ export const WelcomeView = ({
   const isAbogado = selectedPersonality === 'abogado';
   const isTrader = selectedPersonality === 'trader';
   const isAsesor = selectedPersonality === 'asesor';
+  const isInstructor = selectedPersonality === 'instructor';
+  const isNutriologa = selectedPersonality === 'nutriologa';
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',
     year: 'numeric',
@@ -667,6 +732,62 @@ export const WelcomeView = ({
           </div>
         )}
 
+        {/* Instructor selector */}
+        {isInstructor && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedInstructor}
+              onChange={(e) => {
+                setSelectedInstructor(e.target.value);
+                if (e.target.value !== CUSTOM_INSTRUCTOR_KEY) setCustomInstructorName('');
+              }}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {INSTRUCTORS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              {customInstructors.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+              <option value={CUSTOM_INSTRUCTOR_KEY}>Otro...</option>
+            </select>
+            {selectedInstructor === CUSTOM_INSTRUCTOR_KEY && (
+              <input
+                type="text"
+                value={customInstructorName}
+                onChange={(e) => setCustomInstructorName(e.target.value)}
+                placeholder="Describe el tipo de instructor"
+                autoFocus
+                className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-2 w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Nutrióloga selector */}
+        {isNutriologa && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedNutritionist}
+              onChange={(e) => setSelectedNutritionist(e.target.value)}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {NUTRITIONIST_SPECIALTIES.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-muted-foreground mt-2 text-center text-[11px]">
+              No sustituye una consulta profesional presencial
+            </p>
+          </div>
+        )}
+
         {/* Dra. Ana patient selector */}
         {isPsicologo && (
           <div className="mb-4 w-full max-w-sm">
@@ -884,6 +1005,26 @@ export const WelcomeView = ({
                     onStartCall(key);
                     return;
                   }
+                  // Handle custom "Otro..." for Instructor
+                  if (isInstructor && selectedInstructor === CUSTOM_INSTRUCTOR_KEY) {
+                    const name = customInstructorName.trim();
+                    if (!name) return;
+                    const slug = name
+                      .toLowerCase()
+                      .replace(/\s+/g, '_')
+                      .replace(/[^a-z0-9_-]/g, '');
+                    const key = `custom_instructor_${slug}`;
+                    const exists = customInstructors.some((c) => c.key === key);
+                    if (!exists) {
+                      const updated = [...customInstructors, { key, name }];
+                      setCustomInstructors(updated);
+                      saveCustomInstructors(updated);
+                    }
+                    setSelectedInstructor(key);
+                    setCustomInstructorName('');
+                    onStartCall(key);
+                    return;
+                  }
                   // Standard selection
                   const effectiveKey = isEspiritual
                     ? selectedGuide
@@ -897,13 +1038,20 @@ export const WelcomeView = ({
                             ? selectedTrader
                             : isAsesor
                               ? selectedAdvisor
-                              : selectedPersonality;
+                              : isInstructor
+                                ? selectedInstructor
+                                : isNutriologa
+                                  ? selectedNutritionist
+                                  : selectedPersonality;
                   onStartCall(effectiveKey);
                 }}
                 disabled={
                   (isNormal && selectedFamous === CUSTOM_KEY && !customName.trim()) ||
                   (isAbogado && selectedLawyer === CUSTOM_LAWYER_KEY && !customLawyerName.trim()) ||
-                  (isTrader && selectedTrader === CUSTOM_TRADER_KEY && !customTraderName.trim())
+                  (isTrader && selectedTrader === CUSTOM_TRADER_KEY && !customTraderName.trim()) ||
+                  (isInstructor &&
+                    selectedInstructor === CUSTOM_INSTRUCTOR_KEY &&
+                    !customInstructorName.trim())
                 }
                 className="w-full rounded-full font-mono text-xs font-bold tracking-wider uppercase disabled:opacity-50"
               >

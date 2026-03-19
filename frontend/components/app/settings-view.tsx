@@ -23,10 +23,20 @@ const ALL_PERSONALITIES = [
   { key: 'maestro_frances', emoji: '🇫🇷' },
   { key: 'maestro_portugues', emoji: '🇧🇷' },
   { key: 'maestro_aleman', emoji: '🇩🇪' },
+  { key: 'coach_oratoria', emoji: '🎯' },
+  { key: 'instructor_ventas', emoji: '💼' },
+  { key: 'instructor_entrevistas', emoji: '🤝' },
+  { key: 'instructor_historia', emoji: '📚' },
+  { key: 'instructor_meditacion', emoji: '🧘' },
+  { key: 'instructor_salud', emoji: '💚' },
   { key: 'asesor_sistemas', emoji: '🖥️' },
   { key: 'asesor_office', emoji: '📄' },
   { key: 'asesor_web', emoji: '🌐' },
   { key: 'asesor_tecnico', emoji: '🔧' },
+  { key: 'nutriologo', emoji: '🥗' },
+  { key: 'nutriologo_deportivo', emoji: '💪' },
+  { key: 'nutriologo_pediatrico', emoji: '👶' },
+  { key: 'nutriologo_bariatrico', emoji: '⚕️' },
   { key: 'hippy', emoji: '☮️' },
   { key: 'normal', emoji: '👤' },
   { key: 'curie', emoji: '⚗️' },
@@ -48,6 +58,8 @@ const PERSONALITY_CATEGORIES = [
   { key: 'asesor', name: 'Asesor de Sistemas', emoji: '🖥️' },
   { key: 'normal', name: 'Personaje Famoso', emoji: '🌟' },
   { key: 'espiritual', name: 'Guía Espiritual', emoji: '🕊️' },
+  { key: 'instructor', name: 'Instructor', emoji: '🎯' },
+  { key: 'nutriologa', name: 'Nutrióloga', emoji: '🥗' },
 ];
 
 interface SettingsViewProps {
@@ -384,6 +396,32 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
             </div>
           </div>
 
+          {/* Speed */}
+          <div>
+            <label className="text-muted-foreground mb-1 flex items-center justify-between text-xs font-semibold uppercase">
+              <span>Velocidad de habla</span>
+              <span className="text-foreground font-mono normal-case">
+                {(current.speed ?? 1.0).toFixed(2)}
+              </span>
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-[10px]">Lento</span>
+              <input
+                type="range"
+                min="0.6"
+                max="2.0"
+                step="0.05"
+                value={current.speed ?? 1.0}
+                onChange={(e) => update('speed', parseFloat(e.target.value))}
+                className="accent-primary flex-1"
+              />
+              <span className="text-muted-foreground text-[10px]">Rapido</span>
+            </div>
+            <p className="text-muted-foreground mt-1 text-[10px]">
+              1.0 = normal. Valores bajos son mas pedagogicos.
+            </p>
+          </div>
+
           {/* Model (admin only) */}
           {isAdmin && (
             <div>
@@ -472,7 +510,7 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
                   className="border-border bg-background text-foreground w-16 rounded-lg border px-2 py-1 text-center font-mono text-sm focus:outline-none"
                 >
                   <option value={0}>—</option>
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -498,6 +536,31 @@ export function SettingsView({ configs, onSave, onBack, isAdmin }: SettingsViewP
           >
             Guardar orden
           </Button>
+          {isAdmin && (
+            <Button
+              onClick={async () => {
+                setLayoutMsg(null);
+                try {
+                  const res = await fetch('/api/settings/personality-defaults', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ __layout__: layout }),
+                  });
+                  if (!res.ok) throw new Error();
+                  setLayoutMsg({
+                    text: 'Orden default actualizado para todos los usuarios',
+                    error: false,
+                  });
+                } catch {
+                  setLayoutMsg({ text: 'Error al guardar orden default', error: true });
+                }
+              }}
+              variant="outline"
+              className="mt-2 w-full rounded-full text-xs"
+            >
+              Establecer como orden default
+            </Button>
+          )}
         </div>
 
         {/* Email profile */}

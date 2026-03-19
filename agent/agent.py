@@ -102,6 +102,7 @@ async def entrypoint(ctx: JobContext):
     patient_id = None
     custom_voice_id = None
     custom_temperature = None
+    custom_speed = None
     room_name = room.name or ""
     logger.info(f"Room name: '{room_name}'")
 
@@ -152,6 +153,7 @@ async def entrypoint(ctx: JobContext):
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
         custom_temperature = meta.get("temperature")
+        custom_speed = meta.get("speed")
         custom_model = meta.get("model")
         therapy_method = meta.get("therapyMethod")
         couple_therapy = bool(meta.get("coupleTherapy", False))
@@ -230,10 +232,14 @@ async def entrypoint(ctx: JobContext):
     voice_id = custom_voice_id or personality["voice_id"]
     temperature = custom_temperature if custom_temperature is not None else 0.7
     llm_model = custom_model or "google/gemini-2.0-flash-001"
+    # Speed: use custom if provided, otherwise default to 1.0
+    speed = custom_speed if custom_speed is not None else 1.0
+    # Clamp speed to Cartesia Sonic-3 valid range (0.6 - 2.0)
+    speed = max(0.6, min(2.0, float(speed)))
     # Language settings: personality can override STT/TTS language (for language teachers)
     stt_language = personality.get("stt_language", "es")
     tts_language = personality.get("tts_language", "es")
-    logger.info(f"Voice: {voice_id}, Temperature: {temperature}, Model: {llm_model}, STT: {stt_language}, TTS: {tts_language}")
+    logger.info(f"Voice: {voice_id}, Temperature: {temperature}, Speed: {speed}, Model: {llm_model}, STT: {stt_language}, TTS: {tts_language}")
 
     session = AgentSession(
         stt=deepgram.STT(
@@ -250,6 +256,7 @@ async def entrypoint(ctx: JobContext):
             model="sonic-3",
             language=tts_language,
             voice=voice_id,
+            speed=speed,
             api_key=os.getenv("CARTESIA_API_KEY"),
         ),
     )

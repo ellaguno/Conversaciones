@@ -85,6 +85,7 @@ function SessionInner({
   isGuest,
   guestMinutes,
   onGuestExpired,
+  adminLayoutDefaults,
 }: {
   appConfig: AppConfig;
   personality: string;
@@ -105,6 +106,7 @@ function SessionInner({
   isGuest: boolean;
   guestMinutes: number;
   onGuestExpired: () => void;
+  adminLayoutDefaults?: Record<string, number> | null;
 }) {
   const tokenSource = useMemo(() => {
     return TokenSource.custom(async () => {
@@ -116,6 +118,7 @@ function SessionInner({
           patientId,
           voiceId: personalityConfig.voiceId,
           temperature: personalityConfig.temperature,
+          speed: personalityConfig.speed ?? 1.0,
           model: personalityConfig.model,
           ...(therapyMethod && { therapyMethod }),
           ...(coupleTherapy && { coupleTherapy }),
@@ -199,6 +202,7 @@ function SessionInner({
           isAdmin={isAdmin}
           initialPatientId={initialPatientId}
           isGuest={isGuest}
+          adminLayoutDefaults={adminLayoutDefaults}
         />
       </main>
       <StartAudioButton label="Start Audio" />
@@ -273,19 +277,24 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const [adminDefaults, setAdminDefaults] = useState<Record<string, PersonalityConfig> | null>(
     null
   );
+  const [adminLayoutDefaults, setAdminLayoutDefaults] = useState<Record<string, number> | null>(
+    null
+  );
 
   useEffect(() => {
     // Fetch admin defaults and guest config in parallel
     Promise.all([
       fetch('/api/settings/personality-defaults')
         .then((r) => r.json())
-        .then((data) => data.defaults || null)
-        .catch(() => null),
+        .catch(() => ({})),
       fetch('/api/auth/guest-config')
         .then((r) => r.json())
         .catch(() => ({ guestEnabled: false, guestMinutes: 10 })),
-    ]).then(([defaults, guest]) => {
+    ]).then(([result, guest]) => {
+      const defaults = result?.defaults || null;
+      const layoutDefs = result?.layoutDefaults || null;
       setAdminDefaults(defaults);
+      setAdminLayoutDefaults(layoutDefs);
       setConfigs(loadConfigs(defaults));
       setGuestConfig(guest);
     });
@@ -382,6 +391,7 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       isGuest={isGuest}
       guestMinutes={guestConfig?.guestMinutes || 10}
       onGuestExpired={handleGuestExpired}
+      adminLayoutDefaults={adminLayoutDefaults}
     />
   );
 }

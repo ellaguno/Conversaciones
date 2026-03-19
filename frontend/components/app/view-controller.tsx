@@ -49,6 +49,7 @@ interface ViewControllerProps {
   isAdmin?: boolean;
   initialPatientId?: string;
   isGuest?: boolean;
+  adminLayoutDefaults?: Record<string, number> | null;
 }
 
 export function ViewController({
@@ -66,6 +67,7 @@ export function ViewController({
   isAdmin,
   initialPatientId,
   isGuest,
+  adminLayoutDefaults,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
@@ -149,6 +151,7 @@ export function ViewController({
           isAdmin={isGuest ? false : isAdmin}
           initialPatientId={initialPatientId}
           isGuest={isGuest}
+          adminLayoutDefaults={adminLayoutDefaults}
         />
       )}
       {isConnected && (
