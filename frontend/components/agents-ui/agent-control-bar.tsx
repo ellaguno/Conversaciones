@@ -11,6 +11,7 @@ import {
   AgentTrackToggle,
   agentTrackToggleVariants,
 } from '@/components/agents-ui/agent-track-toggle';
+import { AgentVolumeControl } from '@/components/agents-ui/agent-volume-control';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import {
@@ -385,6 +386,9 @@ export function AgentControlBar({
             </Toggle>
           )}
         </div>
+
+        {/* Volume Control */}
+        <AgentVolumeControl className="mx-1" />
 
         {/* Disconnect */}
         {visibleControls.leave && (
