@@ -34,6 +34,10 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 # Cost per 1M tokens (Gemini 2.0 Flash via OpenRouter)
 LLM_COST_PER_1M_INPUT = 0.10
 LLM_COST_PER_1M_OUTPUT = 0.40
+# Cartesia TTS: $0.15 per 1K characters (pay-as-you-go)
+TTS_COST_PER_1K_CHARS = 0.15
+# Deepgram STT: $0.0043 per minute (nova-3 pay-as-you-go)
+STT_COST_PER_MINUTE = 0.0043
 MAX_TRANSCRIPT_TURNS = 500
 
 
@@ -49,8 +53,8 @@ def _load_metrics(user_id: str) -> dict:
     if mf.exists():
         return json.loads(mf.read_text())
     return {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0,
-            "total_cost_usd": 0.0, "llm_calls": 0, "tts_characters": 0,
-            "stt_audio_seconds": 0.0}
+            "total_cost_usd": 0.0, "llm_cost_usd": 0.0, "tts_cost_usd": 0.0, "stt_cost_usd": 0.0,
+            "llm_calls": 0, "tts_characters": 0, "stt_audio_seconds": 0.0}
 
 
 def _save_metrics(user_id: str, m: dict):
@@ -256,18 +260,29 @@ async def entrypoint(ctx: JobContext):
         m = event.metrics
         try:
             data = _load_metrics(user_id)
+            # Ensure cost breakdown fields exist (migration for old metrics files)
+            data.setdefault("llm_cost_usd", 0.0)
+            data.setdefault("tts_cost_usd", 0.0)
+            data.setdefault("stt_cost_usd", 0.0)
             if hasattr(m, "total_tokens"):  # LLM metrics
                 data["total_tokens"] += m.total_tokens
                 data["prompt_tokens"] += m.prompt_tokens
                 data["completion_tokens"] += m.completion_tokens
                 cost = (m.prompt_tokens * LLM_COST_PER_1M_INPUT / 1_000_000 +
                         m.completion_tokens * LLM_COST_PER_1M_OUTPUT / 1_000_000)
+                data["llm_cost_usd"] += cost
                 data["total_cost_usd"] += cost
                 data["llm_calls"] += 1
             elif hasattr(m, "characters_count"):  # TTS metrics
                 data["tts_characters"] += m.characters_count
+                tts_cost = m.characters_count * TTS_COST_PER_1K_CHARS / 1_000
+                data["tts_cost_usd"] += tts_cost
+                data["total_cost_usd"] += tts_cost
             elif hasattr(m, "audio_duration"):  # STT metrics
                 data["stt_audio_seconds"] += m.audio_duration
+                stt_cost = (m.audio_duration / 60) * STT_COST_PER_MINUTE
+                data["stt_cost_usd"] += stt_cost
+                data["total_cost_usd"] += stt_cost
             _save_metrics(user_id, data)
         except Exception as e:
             logger.debug(f"Error guardando métricas: {e}")

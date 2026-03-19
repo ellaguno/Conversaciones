@@ -218,7 +218,12 @@ const THERAPY_METHODS = [
 interface Metrics {
   total_tokens: number;
   total_cost_usd: number;
+  llm_cost_usd: number;
+  tts_cost_usd: number;
+  stt_cost_usd: number;
   llm_calls: number;
+  tts_characters: number;
+  stt_audio_seconds: number;
 }
 
 interface PatientInfo {
@@ -416,12 +421,21 @@ export const WelcomeView = ({
 
         {/* Metrics bar */}
         {metrics && metrics.total_tokens > 0 && (
-          <div className="border-border bg-muted/40 text-muted-foreground mb-4 flex items-center gap-4 rounded-full border px-4 py-1.5 font-mono text-[11px]">
-            <span>{metrics.total_tokens.toLocaleString()} tokens</span>
-            <span className="text-border">|</span>
-            <span>${metrics.total_cost_usd.toFixed(4)} USD</span>
-            <span className="text-border">|</span>
-            <span>{metrics.llm_calls} llamadas</span>
+          <div className="border-border bg-muted/40 text-muted-foreground mb-4 flex flex-col items-center gap-1 rounded-2xl border px-4 py-2 font-mono text-[11px]">
+            <div className="flex items-center gap-4">
+              <span>{metrics.total_tokens.toLocaleString()} tokens</span>
+              <span className="text-border">|</span>
+              <span className="font-semibold">${metrics.total_cost_usd.toFixed(4)} USD</span>
+              <span className="text-border">|</span>
+              <span>{metrics.llm_calls} llamadas</span>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] opacity-70">
+              <span>LLM ${(metrics.llm_cost_usd || 0).toFixed(4)}</span>
+              <span className="text-border">·</span>
+              <span>Voz ${(metrics.tts_cost_usd || 0).toFixed(4)}</span>
+              <span className="text-border">·</span>
+              <span>Escucha ${(metrics.stt_cost_usd || 0).toFixed(4)}</span>
+            </div>
           </div>
         )}
 
