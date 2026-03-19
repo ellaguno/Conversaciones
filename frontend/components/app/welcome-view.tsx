@@ -24,6 +24,12 @@ const ALL_PERSONALITY_CATEGORIES = [
     emoji: '🧠',
   },
   {
+    key: 'idiomas',
+    name: 'Idiomas',
+    description: 'Aprende un nuevo idioma',
+    emoji: '🌍',
+  },
+  {
     key: 'asesor',
     name: 'Asesor de Sistemas',
     description: 'Ve tu pantalla y te guía',
@@ -50,9 +56,10 @@ const DEFAULT_LAYOUT: PersonalityLayout = {
   trader: 1,
   abogado: 2,
   psicologo: 3,
-  asesor: 4,
-  normal: 5,
-  espiritual: 6,
+  idiomas: 4,
+  asesor: 5,
+  normal: 6,
+  espiritual: 7,
 };
 
 export function loadPersonalityLayout(): PersonalityLayout {
@@ -152,6 +159,13 @@ function saveCustomTraders(items: { key: string; name: string }[]) {
   localStorage.setItem('customTraders', JSON.stringify(items));
 }
 
+const LANGUAGE_TEACHERS = [
+  { key: 'maestro_ingles', name: 'Inglés - Teacher Sarah' },
+  { key: 'maestro_frances', name: 'Francés - Professeur Marie' },
+  { key: 'maestro_portugues', name: 'Portugués - Professor Lucas' },
+  { key: 'maestro_aleman', name: 'Alemán - Lehrer Hans' },
+];
+
 const SYSTEM_ADVISORS = [
   { key: 'asesor_sistemas', name: 'General (Windows/Mac/Linux)' },
   { key: 'asesor_office', name: 'Office / Google Workspace' },
@@ -178,6 +192,7 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   for (const g of SYSTEM_ADVISORS) map[g.key] = { category: 'asesor', displayName: g.name };
   for (const g of LAWYER_SPECIALTIES) map[g.key] = { category: 'abogado', displayName: g.name };
   for (const g of TRADER_MARKETS) map[g.key] = { category: 'trader', displayName: g.name };
+  for (const g of LANGUAGE_TEACHERS) map[g.key] = { category: 'idiomas', displayName: g.name };
   // Category keys map to themselves
   map['psicologo'] = { category: 'psicologo', displayName: 'Dra. Ana - Psicóloga clínica' };
   map['espiritual'] = { category: 'espiritual', displayName: 'Guía Espiritual' };
@@ -185,6 +200,7 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   map['asesor'] = { category: 'asesor', displayName: 'Asesor de Sistemas' };
   map['abogado'] = { category: 'abogado', displayName: 'Abogado General' };
   map['trader'] = { category: 'trader', displayName: 'Trader General' };
+  map['idiomas'] = { category: 'idiomas', displayName: 'Maestro de Idiomas' };
   return map;
 })();
 
@@ -285,6 +301,7 @@ export const WelcomeView = ({
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
   const [selectedAdvisor, setSelectedAdvisor] = useState('asesor_sistemas');
+  const [selectedLanguage, setSelectedLanguage] = useState('maestro_ingles');
   const [selectedGuide, setSelectedGuide] = useState('hippy');
   const [selectedFamous, setSelectedFamous] = useState('normal');
   const [customCharacters, setCustomCharacters] = useState<{ key: string; name: string }[]>([]);
@@ -317,6 +334,7 @@ export const WelcomeView = ({
     onSelectPersonality(category);
     // Set the correct sub-selector
     if (category === 'espiritual') setSelectedGuide(selectedPersonality);
+    else if (category === 'idiomas') setSelectedLanguage(selectedPersonality);
     else if (category === 'normal') setSelectedFamous(selectedPersonality);
     else if (category === 'asesor') setSelectedAdvisor(selectedPersonality);
     else if (category === 'abogado') setSelectedLawyer(selectedPersonality);
@@ -368,6 +386,7 @@ export const WelcomeView = ({
   const isGenerating = useGeneratingStatus();
   const isPsicologo = selectedPersonality === 'psicologo' && !isGuest;
   const isEspiritual = selectedPersonality === 'espiritual';
+  const isIdiomas = selectedPersonality === 'idiomas';
   const isNormal = selectedPersonality === 'normal';
   const isAbogado = selectedPersonality === 'abogado';
   const isTrader = selectedPersonality === 'trader';
@@ -590,6 +609,26 @@ export const WelcomeView = ({
             </select>
             <p className="text-muted-foreground mt-2 text-center text-[11px]">
               Comparte tu pantalla durante la llamada para que el asesor te guíe visualmente
+            </p>
+          </div>
+        )}
+
+        {/* Language teacher selector */}
+        {isIdiomas && (
+          <div className="mb-4 w-full max-w-sm">
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="border-border bg-background text-foreground w-full rounded-xl border-2 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
+            >
+              {LANGUAGE_TEACHERS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-muted-foreground mt-2 text-center text-[11px]">
+              El maestro adapta el nivel a tu experiencia con el idioma
             </p>
           </div>
         )}
@@ -831,15 +870,17 @@ export const WelcomeView = ({
                   // Standard selection
                   const effectiveKey = isEspiritual
                     ? selectedGuide
-                    : isNormal
-                      ? selectedFamous
-                      : isAbogado
-                        ? selectedLawyer
-                        : isTrader
-                          ? selectedTrader
-                          : isAsesor
-                            ? selectedAdvisor
-                            : selectedPersonality;
+                    : isIdiomas
+                      ? selectedLanguage
+                      : isNormal
+                        ? selectedFamous
+                        : isAbogado
+                          ? selectedLawyer
+                          : isTrader
+                            ? selectedTrader
+                            : isAsesor
+                              ? selectedAdvisor
+                              : selectedPersonality;
                   onStartCall(effectiveKey);
                 }}
                 disabled={
@@ -854,15 +895,17 @@ export const WelcomeView = ({
               {(() => {
                 const effectiveKey = isEspiritual
                   ? selectedGuide
-                  : isNormal
-                    ? selectedFamous
-                    : isAbogado
-                      ? selectedLawyer
-                      : isTrader
-                        ? selectedTrader
-                        : isAsesor
-                          ? selectedAdvisor
-                          : selectedPersonality;
+                  : isIdiomas
+                    ? selectedLanguage
+                    : isNormal
+                      ? selectedFamous
+                      : isAbogado
+                        ? selectedLawyer
+                        : isTrader
+                          ? selectedTrader
+                          : isAsesor
+                            ? selectedAdvisor
+                            : selectedPersonality;
                 const count = conversationCounts[effectiveKey] || 0;
                 if (count > 0 && onViewConversations) {
                   return (

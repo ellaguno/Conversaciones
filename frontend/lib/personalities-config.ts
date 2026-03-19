@@ -581,6 +581,35 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     temperature: 0.7,
     model: DEFAULT_MODEL,
   },
+  // Maestros de Idiomas
+  maestro_ingles: {
+    name: 'Teacher Sarah',
+    voiceId: 'ccfea4bf-b3f4-421e-87ed-dd05dae01431',
+    visualizer: 'wave',
+    temperature: 0.7,
+    model: DEFAULT_MODEL,
+  },
+  maestro_frances: {
+    name: 'Professeur Marie',
+    voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
+    visualizer: 'wave',
+    temperature: 0.7,
+    model: DEFAULT_MODEL,
+  },
+  maestro_portugues: {
+    name: 'Professor Lucas',
+    voiceId: '399002e9-7f7d-42d4-a6a8-9b91bd809b9d',
+    visualizer: 'wave',
+    temperature: 0.7,
+    model: DEFAULT_MODEL,
+  },
+  maestro_aleman: {
+    name: 'Lehrer Hans',
+    voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565',
+    visualizer: 'wave',
+    temperature: 0.7,
+    model: DEFAULT_MODEL,
+  },
   // Asesores de Sistemas (con visión de pantalla)
   asesor_sistemas: {
     name: 'Asesor de Sistemas',

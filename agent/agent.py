@@ -226,12 +226,15 @@ async def entrypoint(ctx: JobContext):
     voice_id = custom_voice_id or personality["voice_id"]
     temperature = custom_temperature if custom_temperature is not None else 0.7
     llm_model = custom_model or "google/gemini-2.0-flash-001"
-    logger.info(f"Voice: {voice_id}, Temperature: {temperature}, Model: {llm_model}")
+    # Language settings: personality can override STT/TTS language (for language teachers)
+    stt_language = personality.get("stt_language", "es")
+    tts_language = personality.get("tts_language", "es")
+    logger.info(f"Voice: {voice_id}, Temperature: {temperature}, Model: {llm_model}, STT: {stt_language}, TTS: {tts_language}")
 
     session = AgentSession(
         stt=deepgram.STT(
             model="nova-3",
-            language="es",
+            language=stt_language,
         ),
         llm=openai.LLM(
             model=llm_model,
@@ -241,7 +244,7 @@ async def entrypoint(ctx: JobContext):
         ),
         tts=cartesia.TTS(
             model="sonic-3",
-            language="es",
+            language=tts_language,
             voice=voice_id,
             api_key=os.getenv("CARTESIA_API_KEY"),
         ),
