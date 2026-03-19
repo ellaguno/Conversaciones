@@ -419,8 +419,8 @@ export const WelcomeView = ({
           <h1 className="text-foreground text-2xl font-bold">Conversaciones</h1>
         </div>
 
-        {/* Metrics bar */}
-        {metrics && metrics.total_tokens > 0 && (
+        {/* Metrics bar — admin only */}
+        {isAdmin && metrics && metrics.total_tokens > 0 && (
           <div className="border-border bg-muted/40 text-muted-foreground mb-4 flex flex-col items-center gap-1 rounded-2xl border px-4 py-2 font-mono text-[11px]">
             <div className="flex items-center gap-4">
               <span>{metrics.total_tokens.toLocaleString()} tokens</span>
