@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
@@ -33,6 +33,80 @@ const VIEW_MOTION_PROPS = {
   exit: 'hidden',
   transition: { duration: 0.5, ease: 'linear' },
 };
+
+function PostSessionView({
+  personalityKey,
+  personalityName,
+  onContinue,
+  isGuest,
+}: {
+  personalityKey: string;
+  personalityName: string;
+  onContinue: () => void;
+  isGuest?: boolean;
+}) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleEmail = useCallback(async () => {
+    setSending(true);
+    setError('');
+    try {
+      const res = await fetch('/api/conversations/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personality: personalityKey,
+          personalityName,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al enviar');
+      }
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al enviar');
+    } finally {
+      setSending(false);
+    }
+  }, [personalityKey, personalityName]);
+
+  return (
+    <div className="bg-background flex min-h-svh items-center justify-center px-4">
+      <div className="w-full max-w-sm space-y-5 text-center">
+        <div className="text-4xl">&#10003;</div>
+        <h1 className="text-foreground text-lg font-bold">Sesion finalizada</h1>
+        <p className="text-muted-foreground text-sm">
+          Tu conversacion con <strong>{personalityName}</strong> ha sido guardada.
+        </p>
+        {!isGuest && (
+          <div className="space-y-2">
+            {sent ? (
+              <p className="text-sm text-green-600">Correo enviado correctamente</p>
+            ) : (
+              <button
+                onClick={handleEmail}
+                disabled={sending}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80 w-full rounded-full px-6 py-2.5 font-mono text-xs font-bold uppercase disabled:opacity-50"
+              >
+                {sending ? 'Enviando...' : 'Enviar transcripcion por correo'}
+              </button>
+            )}
+            {error && <p className="text-xs text-red-500">{error}</p>}
+          </div>
+        )}
+        <button
+          onClick={onContinue}
+          className="bg-primary text-primary-foreground w-full rounded-full px-6 py-2.5 font-mono text-xs font-bold uppercase"
+        >
+          Continuar
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface ViewControllerProps {
   appConfig: AppConfig;
@@ -76,12 +150,15 @@ export function ViewController({
   const [showNotes, setShowNotes] = useState(false);
   const [showConversations, setShowConversations] = useState<string | null>(null);
   const [showTranscribe, setShowTranscribe] = useState(false);
+  const [showPostSession, setShowPostSession] = useState(false);
 
   // Detect disconnection to reset autoConnect
   useEffect(() => {
     if (isConnected) {
       wasConnected.current = true;
     } else if (wasConnected.current) {
+      wasConnected.current = false;
+      setShowPostSession(true);
       onDisconnected?.();
     }
   }, [isConnected, onDisconnected]);
@@ -96,6 +173,19 @@ export function ViewController({
       start();
     }
   }, [autoConnect, isConnected, start]);
+
+  // Post-session view
+  if (showPostSession && !isConnected) {
+    const config = DEFAULT_CONFIGS[activePersonality];
+    return (
+      <PostSessionView
+        personalityKey={activePersonality}
+        personalityName={config?.name || activePersonality}
+        onContinue={() => setShowPostSession(false)}
+        isGuest={isGuest}
+      />
+    );
+  }
 
   // Transcribe view
   if (showTranscribe && !isConnected) {

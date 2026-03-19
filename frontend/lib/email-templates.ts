@@ -97,6 +97,22 @@ export function passwordResetEmail(displayName: string, resetUrl: string): strin
   `);
 }
 
+export function conversationTranscriptEmail(
+  content: string,
+  personalityName: string,
+  sessionDate: string
+): string {
+  const htmlContent = markdownToHtml(content);
+  return baseLayout(`
+    <h2 style="color:#1f2937;margin:0 0 8px;">Transcripcion de conversacion</h2>
+    <p style="color:#6b7280;margin:0 0 16px;font-size:14px;">Con: <strong>${escapeHtml(personalityName)}</strong> &middot; Fecha: ${escapeHtml(sessionDate)}</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
+    <div style="color:#374151;font-size:14px;line-height:1.6;">
+      ${htmlContent}
+    </div>
+  `);
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')

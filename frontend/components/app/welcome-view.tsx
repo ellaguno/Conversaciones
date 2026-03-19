@@ -19,8 +19,8 @@ const ALL_PERSONALITY_CATEGORIES = [
   },
   {
     key: 'psicologo',
-    name: 'Dra. Ana',
-    description: 'Psicóloga clínica',
+    name: 'Psicóloga',
+    description: 'Ana',
     emoji: '🧠',
   },
   {
@@ -229,7 +229,7 @@ function saveCustomInstructors(items: { key: string; name: string }[]) {
 }
 
 const NUTRITIONIST_SPECIALTIES = [
-  { key: 'nutriologo', name: 'Nutrióloga Clínica (General)' },
+  { key: 'nutriologo', name: 'Nutrióloga (General)' },
   { key: 'nutriologo_deportivo', name: 'Nutrición Deportiva' },
   { key: 'nutriologo_pediatrico', name: 'Nutrición Pediátrica' },
   { key: 'nutriologo_bariatrico', name: 'Nutrición Bariátrica' },
@@ -249,7 +249,7 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   for (const g of NUTRITIONIST_SPECIALTIES)
     map[g.key] = { category: 'nutriologa', displayName: g.name };
   // Category keys map to themselves
-  map['psicologo'] = { category: 'psicologo', displayName: 'Dra. Ana - Psicóloga clínica' };
+  map['psicologo'] = { category: 'psicologo', displayName: 'Psicóloga Ana' };
   map['espiritual'] = { category: 'espiritual', displayName: 'Guía Espiritual' };
   map['normal'] = { category: 'normal', displayName: 'Alguien Normal' };
   map['asesor'] = { category: 'asesor', displayName: 'Asesor de Sistemas' };
@@ -257,7 +257,7 @@ const PERSONALITY_TO_CATEGORY: Record<string, { category: string; displayName: s
   map['trader'] = { category: 'trader', displayName: 'Trader General' };
   map['idiomas'] = { category: 'idiomas', displayName: 'Maestro de Idiomas' };
   map['instructor'] = { category: 'instructor', displayName: 'Instructor' };
-  map['nutriologa'] = { category: 'nutriologa', displayName: 'Nutrióloga Clínica' };
+  map['nutriologa'] = { category: 'nutriologa', displayName: 'Nutrióloga' };
   return map;
 })();
 

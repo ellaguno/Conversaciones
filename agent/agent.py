@@ -25,6 +25,7 @@ from session_manager import SessionManager
 from conversation_log import ConversationLog
 from therapy_tools import create_therapy_tools
 from note_generator import generate_session_notes, generate_intake_notes
+from summary_generator import generate_summary, read_summary
 
 logger = logging.getLogger("comerciante-con-voz")
 logger.setLevel(logging.INFO)
@@ -225,6 +226,19 @@ async def entrypoint(ctx: JobContext):
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
             logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()} - Método: {method_key}")
 
+    # Inject session memory for non-therapy personalities with has_sessions
+    if manager is None and personality.get("has_sessions"):
+        existing_summary = read_summary(user_id, personality_key)
+        if existing_summary:
+            instructions += (
+                "\n\n--- CONTEXTO DE SESIONES ANTERIORES ---\n"
+                "A continuación tienes un resumen de tus conversaciones previas con este usuario. "
+                "Úsalo para dar continuidad, recordar temas tratados y personalizar la conversación. "
+                "No menciones explícitamente que leíste un resumen, simplemente recuerda naturalmente.\n\n"
+                + existing_summary
+            )
+            logger.info(f"Contexto de sesiones previas inyectado para {personality_key}")
+
     # Conversation log for all personalities (user-scoped)
     conv_log = ConversationLog(personality_key, personality["name"], user_id=user_id)
 
@@ -339,11 +353,16 @@ async def entrypoint(ctx: JobContext):
         conv_log.save(transcript, start_time)
         logger.info(f"Conversación guardada: {conv_log.get_log_dir()}")
 
-        # Generate therapy notes only for Dra. Ana
+        # Generate therapy notes for Dra. Ana, or lightweight summary for other personalities
         if manager is not None:
             notes_done.clear()
             asyncio.create_task(_generate_notes_and_signal(
                 notes_done, manager, transcript, start_time
+            ))
+        elif personality.get("has_sessions"):
+            notes_done.clear()
+            asyncio.create_task(_generate_summary_and_signal(
+                notes_done, user_id, personality_key, personality["name"], transcript
             ))
 
     has_vision = personality.get("has_vision", False) or personality_key in VISION_PERSONALITIES
@@ -366,6 +385,20 @@ async def _generate_notes_and_signal(
     """Wrapper that signals completion so the process can exit."""
     try:
         await _generate_notes(manager, transcript, start_time)
+    finally:
+        done_event.set()
+
+
+async def _generate_summary_and_signal(
+    done_event: asyncio.Event, user_id: str, personality_key: str, personality_name: str, transcript: list
+):
+    """Generate lightweight session summary then signal completion."""
+    try:
+        logger.info(f"Generando resumen de sesión para {personality_key}...")
+        await generate_summary(user_id, personality_key, personality_name, transcript)
+        logger.info(f"Resumen de sesión generado para {personality_key}")
+    except Exception as e:
+        logger.error(f"Error generando resumen: {e}", exc_info=True)
     finally:
         done_event.set()
 
