@@ -39,6 +39,9 @@ const PERSONALITY_MAP: Record<string, string> = {
   imam: 'imam',
   rabino: 'rabino',
   pandit: 'pandit',
+  curie: 'curie',
+  vangogh: 'vangogh',
+  hipatia: 'hipatia',
   // Language teachers
   maestro_ingles: 'maestro_ingles',
   maestro_frances: 'maestro_frances',

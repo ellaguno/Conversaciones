@@ -581,6 +581,27 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     temperature: 0.7,
     model: DEFAULT_MODEL,
   },
+  curie: {
+    name: 'Marie Curie',
+    voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
+    visualizer: 'radial',
+    temperature: 0.6,
+    model: DEFAULT_MODEL,
+  },
+  vangogh: {
+    name: 'Vincent van Gogh',
+    voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3',
+    visualizer: 'aura',
+    temperature: 0.8,
+    model: DEFAULT_MODEL,
+  },
+  hipatia: {
+    name: 'Hipatia de Alejandría',
+    voiceId: 'ae823354-f9be-4aef-8543-f569644136b4',
+    visualizer: 'radial',
+    temperature: 0.6,
+    model: DEFAULT_MODEL,
+  },
   // Maestros de Idiomas
   maestro_ingles: {
     name: 'Teacher Sarah',

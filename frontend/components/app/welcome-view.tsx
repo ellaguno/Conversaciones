@@ -91,6 +91,9 @@ const DEFAULT_FAMOUS_CHARACTERS = [
   { key: 'aquino', name: 'Santo Tomas de Aquino' },
   { key: 'francisco', name: 'San Francisco de Asis' },
   { key: 'suntzu', name: 'Sun Tzu' },
+  { key: 'curie', name: 'Marie Curie' },
+  { key: 'vangogh', name: 'Vincent van Gogh' },
+  { key: 'hipatia', name: 'Hipatia de Alejandría' },
 ];
 
 const CUSTOM_KEY = '__other__';
