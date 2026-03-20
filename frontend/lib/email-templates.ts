@@ -113,6 +113,21 @@ export function conversationTranscriptEmail(
   `);
 }
 
+export function invitationEmail(fromName: string, registerUrl: string): string {
+  return baseLayout(`
+    <h2 style="color:#1f2937;margin:0 0 8px;">Te han invitado a Conversaciones</h2>
+    <p style="color:#6b7280;margin:0 0 16px;font-size:14px;"><strong>${escapeHtml(fromName)}</strong> te invita a probar Conversaciones con Voz.</p>
+    <p style="color:#374151;font-size:14px;line-height:1.6;">
+      Habla con expertos, personajes famosos, guias espirituales y mas usando inteligencia artificial con voz en tiempo real.
+    </p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${escapeHtml(registerUrl)}" style="display:inline-block;background:#7c3aed;color:#ffffff;padding:12px 32px;border-radius:999px;text-decoration:none;font-weight:bold;font-size:14px;">
+        Crear mi cuenta
+      </a>
+    </div>
+  `);
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')

@@ -392,6 +392,9 @@ export const WelcomeView = ({
   const [recentAgents, setRecentAgents] = useState<
     { personality: string; lastDate: string; count: number }[]
   >([]);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStatus, setInviteStatus] = useState('');
   const [therapyMethod, setTherapyMethod] = useState('mindfulness');
   const [coupleTherapy, setCoupleTherapy] = useState(false);
 
@@ -1151,26 +1154,9 @@ export const WelcomeView = ({
           )}
 
           {/* Invite button */}
-          {!isGuest && (
+          {!isGuest && !showInvite && (
             <button
-              onClick={async () => {
-                const url = `${window.location.origin}/register`;
-                const shareData = {
-                  title: 'Conversaciones con Voz',
-                  text: 'Prueba Conversaciones con Voz: habla con expertos, personajes famosos y más usando inteligencia artificial.',
-                  url,
-                };
-                try {
-                  if (navigator.share) {
-                    await navigator.share(shareData);
-                  } else {
-                    await navigator.clipboard.writeText(url);
-                    alert('Link copiado al portapapeles');
-                  }
-                } catch {
-                  /* user cancelled share */
-                }
-              }}
+              onClick={() => setShowInvite(true)}
               className="text-muted-foreground hover:text-foreground mt-1 flex items-center justify-center gap-1.5 text-xs transition-colors hover:underline"
             >
               <svg
@@ -1181,12 +1167,70 @@ export const WelcomeView = ({
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
-                <polyline points="16 6 12 2 8 6" />
-                <line x1="12" y1="2" x2="12" y2="15" />
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <line x1="19" y1="8" x2="19" y2="14" />
+                <line x1="22" y1="11" x2="16" y2="11" />
               </svg>
               Invitar a alguien
             </button>
+          )}
+          {!isGuest && showInvite && (
+            <div className="border-border bg-background mt-2 w-full max-w-md rounded-xl border p-4 shadow-sm">
+              <p className="text-foreground mb-2 text-center text-xs font-medium">
+                Enviar invitacion por correo
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="border-border bg-background text-foreground placeholder:text-muted-foreground flex-1 rounded-full border px-3 py-1.5 text-xs focus:outline-none"
+                />
+                <button
+                  onClick={async () => {
+                    if (!inviteEmail.includes('@')) return;
+                    setInviteStatus('sending');
+                    try {
+                      const res = await fetch('/api/invite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: inviteEmail }),
+                      });
+                      if (!res.ok) throw new Error();
+                      setInviteStatus('sent');
+                      setTimeout(() => {
+                        setShowInvite(false);
+                        setInviteEmail('');
+                        setInviteStatus('');
+                      }, 2000);
+                    } catch {
+                      setInviteStatus('error');
+                    }
+                  }}
+                  disabled={inviteStatus === 'sending' || !inviteEmail.includes('@')}
+                  className="bg-primary text-primary-foreground shrink-0 rounded-full px-4 py-1.5 text-xs font-bold disabled:opacity-50"
+                >
+                  {inviteStatus === 'sending' ? '...' : 'Enviar'}
+                </button>
+              </div>
+              {inviteStatus === 'sent' && (
+                <p className="mt-2 text-center text-xs text-green-600">Invitacion enviada</p>
+              )}
+              {inviteStatus === 'error' && (
+                <p className="mt-2 text-center text-xs text-red-500">Error al enviar</p>
+              )}
+              <button
+                onClick={() => {
+                  setShowInvite(false);
+                  setInviteStatus('');
+                }}
+                className="text-muted-foreground mt-2 w-full text-center text-[10px] hover:underline"
+              >
+                Cancelar
+              </button>
+            </div>
           )}
         </div>
 
