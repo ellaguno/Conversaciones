@@ -15,6 +15,7 @@ interface ConversationLogViewProps {
   personalityName: string;
   onBack: () => void;
   onStartCall: () => void;
+  isGuest?: boolean;
 }
 
 function MarkdownContent({ content }: { content: string }) {
@@ -93,12 +94,33 @@ export function ConversationLogView({
   personalityName,
   onBack,
   onStartCall,
+  isGuest,
 }: ConversationLogViewProps) {
   const [conversations, setConversations] = useState<ConversationFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingContent, setViewingContent] = useState<string | null>(null);
   const [viewingFilename, setViewingFilename] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Email state
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [emailMsg, setEmailMsg] = useState('');
+
+  // Delete state
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Fetch user email on mount
+  useEffect(() => {
+    if (isGuest) return;
+    fetch('/api/auth/profile')
+      .then((r) => r.json())
+      .then((data) => setUserEmail(data.email || ''))
+      .catch(() => setUserEmail(''));
+  }, [isGuest]);
 
   const fetchData = useCallback(() => {
     fetch('/api/conversations')
@@ -129,9 +151,73 @@ export function ConversationLogView({
       const data = await res.json();
       setViewingContent(data.content);
       setViewingFilename(filename);
+      setConfirmDelete(false);
+      setEmailMsg('');
     } catch {
       setViewingContent('Error al cargar la conversacion.');
       setViewingFilename(filename);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!emailInput.includes('@')) return;
+    setSavingEmail(true);
+    try {
+      await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      setUserEmail(emailInput);
+    } catch {
+      setEmailMsg('Error al guardar correo');
+    }
+    setSavingEmail(false);
+  };
+
+  const handleEmail = async () => {
+    if (!viewingFilename) return;
+    setSending(true);
+    setEmailMsg('');
+    try {
+      const res = await fetch('/api/conversations/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personality,
+          personalityName,
+          filename: viewingFilename,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al enviar');
+      }
+      setEmailMsg('Correo enviado');
+    } catch (e) {
+      setEmailMsg(e instanceof Error ? e.message : 'Error al enviar');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!viewingFilename) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/conversations/${viewingFilename}?personality=${encodeURIComponent(personality)}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error('Error al eliminar');
+      setViewingFilename(null);
+      setViewingContent(null);
+      setConfirmDelete(false);
+      fetchData();
+    } catch {
+      setEmailMsg('Error al eliminar');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -183,6 +269,30 @@ export function ConversationLogView({
             </div>
           </div>
           <div className="flex gap-2">
+            {viewingFilename && !isGuest && (
+              <>
+                <button
+                  onClick={() => {
+                    if (userEmail) {
+                      handleEmail();
+                    } else {
+                      setEmailMsg('input');
+                    }
+                  }}
+                  disabled={sending}
+                  className="bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-full px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
+                  title={userEmail ? `Enviar a ${userEmail}` : 'Enviar por correo'}
+                >
+                  {sending ? '...' : '✉ Enviar'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="rounded-full border border-red-300 px-3 py-1.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  Borrar
+                </button>
+              </>
+            )}
             <button
               onClick={onStartCall}
               className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-4 py-1.5 text-xs font-bold transition-colors"
@@ -198,6 +308,78 @@ export function ConversationLogView({
           </div>
         </div>
       </header>
+
+      {/* Email input (no email configured) */}
+      {viewingFilename && emailMsg === 'input' && !userEmail && (
+        <div className="border-border bg-muted/50 flex-shrink-0 border-b px-4 py-3">
+          <div className="mx-auto flex max-w-2xl items-center gap-2">
+            <p className="text-muted-foreground shrink-0 text-xs">Tu correo:</p>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="tu@correo.com"
+              className="border-border bg-background text-foreground placeholder:text-muted-foreground flex-1 rounded-full border px-3 py-1.5 text-xs focus:outline-none"
+            />
+            <button
+              onClick={async () => {
+                await handleSaveEmail();
+                if (emailInput.includes('@')) {
+                  setEmailMsg('');
+                  handleEmail();
+                }
+              }}
+              disabled={savingEmail || !emailInput.includes('@')}
+              className="bg-primary text-primary-foreground shrink-0 rounded-full px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+            >
+              {savingEmail ? '...' : 'Guardar y enviar'}
+            </button>
+            <button
+              onClick={() => setEmailMsg('')}
+              className="text-muted-foreground text-xs hover:underline"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Email status message */}
+      {viewingFilename && emailMsg && emailMsg !== 'input' && (
+        <div className="border-border flex-shrink-0 border-b px-4 py-2">
+          <p
+            className={`mx-auto max-w-2xl text-center text-xs ${emailMsg.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}
+          >
+            {emailMsg}
+          </p>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="flex-shrink-0 border-b border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/50">
+          <div className="mx-auto flex max-w-2xl items-center justify-between">
+            <p className="text-sm text-red-700 dark:text-red-400">
+              Esta accion no se puede deshacer. ¿Eliminar esta conversacion?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? '...' : 'Si, eliminar'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-muted-foreground text-xs hover:underline"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div ref={contentRef} className="flex-1 overflow-y-auto">

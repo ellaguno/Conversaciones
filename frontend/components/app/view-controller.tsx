@@ -313,6 +313,7 @@ export function ViewController({
           setShowConversations(null);
           onStartCall(p);
         }}
+        isGuest={isGuest}
       />
     );
   }

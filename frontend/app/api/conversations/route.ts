@@ -32,8 +32,9 @@ export async function GET(req: Request) {
     const userId = session.user.id;
     const conversationsBase = getUserConversationsDir(userId);
 
-    // Quick check: does a specific personality have any transcripts?
     const url = new URL(req.url);
+
+    // Quick check: does a specific personality have any transcripts?
     const checkPersonality = url.searchParams.get('personality');
     if (checkPersonality && url.searchParams.get('check')) {
       const safeKey = checkPersonality.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -43,6 +44,34 @@ export async function GET(req: Request) {
         count = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'summary.md').length;
       }
       return NextResponse.json({ count });
+    }
+
+    // Recent: return last N agents sorted by most recent conversation
+    if (url.searchParams.get('recent')) {
+      if (!existsSync(conversationsBase)) {
+        return NextResponse.json({ recent: [] });
+      }
+      const dirs = readdirSync(conversationsBase).filter((d) => {
+        try {
+          return statSync(join(conversationsBase, d)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+      const recents: { personality: string; lastDate: string; count: number }[] = [];
+      for (const d of dirs) {
+        const dirPath = join(conversationsBase, d);
+        const files = readdirSync(dirPath)
+          .filter((f) => f.endsWith('.md') && f !== 'summary.md')
+          .sort()
+          .reverse();
+        if (files.length === 0) continue;
+        const match = files[0].match(/^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})\.md$/);
+        const lastDate = match ? `${match[1]} ${match[2].replace('-', ':')}` : '';
+        recents.push({ personality: d, lastDate, count: files.length });
+      }
+      recents.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+      return NextResponse.json({ recent: recents.slice(0, 5) });
     }
 
     if (!existsSync(conversationsBase)) {

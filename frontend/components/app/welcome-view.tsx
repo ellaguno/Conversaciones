@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
 
 const ALL_PERSONALITY_CATEGORIES = [
   {
@@ -388,6 +389,9 @@ export const WelcomeView = ({
     setCustomInstructors(loadCustomInstructors());
   }, []);
   const [conversationCounts, setConversationCounts] = useState<Record<string, number>>({});
+  const [recentAgents, setRecentAgents] = useState<
+    { personality: string; lastDate: string; count: number }[]
+  >([]);
   const [therapyMethod, setTherapyMethod] = useState('mindfulness');
   const [coupleTherapy, setCoupleTherapy] = useState(false);
 
@@ -430,6 +434,12 @@ export const WelcomeView = ({
         setConversationCounts(counts);
       })
       .catch(() => {});
+    if (!isGuest) {
+      fetch('/api/conversations?recent=1')
+        .then((r) => r.json())
+        .then((data) => setRecentAgents(data.recent || []))
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -544,6 +554,57 @@ export const WelcomeView = ({
             >
               &times;
             </button>
+          </div>
+        )}
+
+        {/* Recent agents */}
+        {recentAgents.length > 0 && (
+          <div className="mb-4 w-full max-w-md">
+            <p className="text-muted-foreground mb-2 text-left text-[11px] font-semibold tracking-wide uppercase">
+              Recientes
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentAgents.map((r) => {
+                const config = DEFAULT_CONFIGS[r.personality];
+                const name = config?.name || r.personality.replace(/_/g, ' ');
+                const subtitle =
+                  PERSONALITY_TO_CATEGORY[r.personality]?.displayName || 'Conversacion';
+                return (
+                  <div
+                    key={r.personality}
+                    className="border-border hover:border-muted-foreground/50 flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all hover:shadow-sm"
+                  >
+                    <div
+                      className="min-w-0 cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onStartCall(r.personality)}
+                      onKeyDown={(e) => e.key === 'Enter' && onStartCall(r.personality)}
+                    >
+                      <p className="text-foreground truncate text-xs font-semibold">{name}</p>
+                      <p className="text-muted-foreground truncate text-[10px]">{subtitle}</p>
+                    </div>
+                    {onViewConversations && (
+                      <button
+                        onClick={() => onViewConversations(r.personality)}
+                        title={`${r.count} conversaciones`}
+                        className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5 transition-colors"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className="h-3.5 w-3.5"
+                        >
+                          <path d="M3 3.5A1.5 1.5 0 014.5 2h6.879a1.5 1.5 0 011.06.44l4.122 4.12A1.5 1.5 0 0117 7.622V16.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 16.5v-13z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <hr className="border-border mt-4" />
           </div>
         )}
 
