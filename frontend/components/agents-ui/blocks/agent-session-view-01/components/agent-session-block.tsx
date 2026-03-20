@@ -9,6 +9,7 @@ import {
   type AgentControlBarControls,
 } from '@/components/agents-ui/agent-control-bar';
 import { Shimmer } from '@/components/ai-elements/shimmer';
+import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
 import { cn } from '@/lib/shadcn/utils';
 import { TileLayout } from './tile-view';
 
@@ -157,12 +158,62 @@ export interface AgentSessionView_01Props {
   className?: string;
 }
 
-const PERSONALITY_NAMES: Record<string, string> = {
-  trader: 'Carlos el Trader',
-  abogado: 'Lic. Martinez',
-  psicologo: 'Dra. Ana',
-  hippy: 'Paz',
+const PERSONALITY_SUBTITLE: Record<string, string> = {
+  trader: 'Trader',
+  trader_bolsa: 'Trader',
+  trader_crypto: 'Trader',
+  trader_forex: 'Trader',
+  trader_dinero: 'Finanzas',
+  trader_commodities: 'Trader',
+  abogado: 'Abogado',
+  abogado_corporativo: 'Abogado',
+  abogado_laboral: 'Abogado',
+  abogado_fiscal: 'Abogado',
+  abogado_penal: 'Abogado',
+  abogado_familiar: 'Abogado',
+  abogado_inmobiliario: 'Abogado',
+  psicologo: 'Psicóloga',
+  hippy: 'Conversacion',
+  normal: 'Conversacion',
+  tesla: 'Personaje Famoso',
+  jesus: 'Personaje Famoso',
+  aquino: 'Personaje Famoso',
+  francisco: 'Personaje Famoso',
+  suntzu: 'Personaje Famoso',
+  curie: 'Personaje Famoso',
+  vangogh: 'Personaje Famoso',
+  hipatia: 'Personaje Famoso',
+  estoico: 'Guía Espiritual',
+  sacerdote: 'Guía Espiritual',
+  monje: 'Guía Espiritual',
+  imam: 'Guía Espiritual',
+  rabino: 'Guía Espiritual',
+  pandit: 'Guía Espiritual',
+  maestro_ingles: 'Idiomas',
+  maestro_frances: 'Idiomas',
+  maestro_portugues: 'Idiomas',
+  maestro_aleman: 'Idiomas',
+  asesor_sistemas: 'Asesor de Sistemas',
+  asesor_office: 'Asesor de Sistemas',
+  asesor_web: 'Asesor de Sistemas',
+  asesor_tecnico: 'Asesor de Sistemas',
+  coach_oratoria: 'Instructor',
+  instructor_ventas: 'Instructor',
+  instructor_entrevistas: 'Instructor',
+  instructor_historia: 'Instructor',
+  instructor_meditacion: 'Instructor',
+  instructor_salud: 'Instructor',
+  nutriologo: 'Nutrióloga',
+  nutriologo_deportivo: 'Nutrióloga',
+  nutriologo_pediatrico: 'Nutrióloga',
+  nutriologo_bariatrico: 'Nutrióloga',
 };
+
+function getSubtitle(key: string): string {
+  if (PERSONALITY_SUBTITLE[key]) return PERSONALITY_SUBTITLE[key];
+  if (key.startsWith('custom_')) return 'Personaje';
+  return 'Conversacion';
+}
 
 function useSessionTimer() {
   const [elapsed, setElapsed] = useState(0);
@@ -246,9 +297,12 @@ export function AgentSessionView_01({
       {...props}
     >
       {/* Session header */}
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-3">
-        <div className="border-border bg-background/80 text-muted-foreground rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-sm">
-          {PERSONALITY_NAMES[personality ?? ''] ?? 'Conversacion'}
+      <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center gap-2 px-4 pt-3">
+        <div className="text-center">
+          <h2 className="text-foreground text-base leading-tight font-bold drop-shadow-sm">
+            {DEFAULT_CONFIGS[personality ?? '']?.name ?? personality ?? 'Conversacion'}
+          </h2>
+          <p className="text-muted-foreground text-xs">{getSubtitle(personality ?? '')}</p>
         </div>
         <div className="flex items-center gap-3">
           {metrics && metrics.total_tokens > 0 && (
