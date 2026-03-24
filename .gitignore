@@ -43,5 +43,10 @@ personality-defaults.json
 # Claude
 .claude/
 
+# Demo seguros
+docs/cotizacion-aseguradora.md
+docs/demo-seguros.md
+frontend/app/demo/seguros/
+
 # Misc
 *.log
