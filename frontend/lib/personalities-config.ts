@@ -781,6 +781,39 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     speed: 0.85,
     model: DEFAULT_MODEL,
   },
+  // Demo: Venta de Seguros
+  demo_vendedor_vida: {
+    name: 'Vendedor de Seguro de Vida',
+    voiceId: '948196a7-fe02-417b-9b6d-c45ee0803565', // Manuel - Presentador
+    visualizer: 'bar',
+    temperature: 0.7,
+    speed: 1.0,
+    model: 'google/gemini-3-flash-preview',
+  },
+  demo_vendedor_gastos: {
+    name: 'Vendedor de Gastos Médicos',
+    voiceId: 'ad8eee76-d702-4a1f-a1bd-7596755ae4c9', // Valeria - Promotora
+    visualizer: 'bar',
+    temperature: 0.7,
+    speed: 1.0,
+    model: 'google/gemini-3-flash-preview',
+  },
+  demo_cliente_vida: {
+    name: 'Prospecto de Seguro de Vida',
+    voiceId: '7b001dff-b8b2-4da7-92e4-5c794798effa', // Jorge - Tipo Normal
+    visualizer: 'wave',
+    temperature: 0.7,
+    speed: 1.0,
+    model: 'google/gemini-3-flash-preview',
+  },
+  demo_cliente_gastos: {
+    name: 'Prospecto de Gastos Médicos',
+    voiceId: '727f663b-0e90-4031-90f2-558b7334425b', // Carmen - Vecina Amigable
+    visualizer: 'wave',
+    temperature: 0.7,
+    speed: 1.0,
+    model: 'google/gemini-3-flash-preview',
+  },
 };
 
 const STORAGE_KEY = 'personality-configs';

@@ -24,7 +24,13 @@ function getGoogleProvider() {
 
 const googleProvider = getGoogleProvider();
 
-const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/demo/seguros',
+];
 
 // Paths that guests may access — the page/API itself checks guestEnabled
 const GUEST_PATHS = [
@@ -32,6 +38,7 @@ const GUEST_PATHS = [
   '/api/token',
   '/api/auth/guest-config',
   '/api/settings/personality-defaults',
+  '/demo/seguros',
 ];
 
 const config: NextAuthConfig = {

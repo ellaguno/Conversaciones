@@ -225,3 +225,31 @@ Cada sala de LiveKit permite maximo 2 participantes (tu y el agente). No puedes 
 - Asegurate de que el microfono este habilitado en el navegador
 - Intenta refrescar la pagina y reconectar
 - Si el problema persiste, contacta al administrador
+
+---
+
+## Demo: Venta de Seguros
+
+Existe una seccion de demo publica en `/demo/seguros` que no requiere cuenta ni contrasena. Permite practicar ventas de seguros con agentes de IA.
+
+### Dos modos disponibles
+
+1. **"Que te vendan"**: Un agente IA actua como vendedor e intenta venderte un seguro. Puedes elegir entre perfil agresivo, asertivo o pasivo.
+
+2. **"Practica ventas"**: Tu vendes y el agente IA actua como prospecto. Te califica en tiempo real mostrando:
+   - Emocion actual del prospecto (confianza, desconfianza, interes, etc.)
+   - Barra de intencion de compra (0-100%)
+   - Al final: si cerraste la venta, abriste a seguimiento o la perdiste, con puntaje de 1 a 10
+
+### Tipos de seguro
+
+- **Seguro de Vida**: Cobertura por fallecimiento, invalidez y ahorro
+- **Gastos Medicos Mayores**: Hospitalizacion, cirugias, medicamentos
+
+### Perfiles de prospecto
+
+- **Facil**: Interesado, con presupuesto, abierto a comprar
+- **Normal**: Dudas legitimas, abierto a escuchar
+- **Dificil**: Esceptico, desconfiado, muchas objeciones
+
+Para mas detalles tecnicos, consulta `docs/demo-seguros.md`.

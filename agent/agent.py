@@ -21,6 +21,7 @@ from personalities import (
     THERAPY_METHODS, DEFAULT_THERAPY_METHOD, DRA_ANA_COUPLE_ADDON,
     get_voice_for_name,
 )
+from demo_tools import create_demo_client_tools
 from session_manager import SessionManager
 from conversation_log import ConversationLog
 from therapy_tools import create_therapy_tools
@@ -150,6 +151,7 @@ async def entrypoint(ctx: JobContext):
     therapy_method = None
     couple_therapy = False
     user_id = "default"
+    demo_profile = ""
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
@@ -159,6 +161,7 @@ async def entrypoint(ctx: JobContext):
         therapy_method = meta.get("therapyMethod")
         couple_therapy = bool(meta.get("coupleTherapy", False))
         user_id = meta.get("userId", "default")
+        demo_profile = meta.get("demoProfile", "")
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -225,6 +228,18 @@ async def entrypoint(ctx: JobContext):
             instructions += "\n\n" + DRA_ANA_FOLLOWUP_PROMPT
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
             logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()} - Método: {method_key}")
+
+    # Demo: attach evaluation tools for client/prospect agents
+    if personality.get("has_demo_tools"):
+        tools = create_demo_client_tools(room)
+        # Inject demo profile into instructions
+        if demo_profile:
+            instructions += f"\n\n--- PERFIL DE DEMO ---\nTu perfil de cliente es: '{demo_profile}'. Ajusta tu comportamiento según las instrucciones de ese perfil."
+            logger.info(f"Demo tools activados, perfil: {demo_profile}")
+    elif personality.get("is_demo") and demo_profile:
+        # Seller demo: inject profile into instructions
+        instructions += f"\n\n--- PERFIL DE DEMO ---\nTu perfil de vendedor es: '{demo_profile}'. Ajusta tu estilo de venta según las instrucciones de ese perfil."
+        logger.info(f"Demo vendedor, perfil: {demo_profile}")
 
     # Inject session memory for non-therapy personalities with has_sessions
     if manager is None and personality.get("has_sessions"):
@@ -374,6 +389,12 @@ async def entrypoint(ctx: JobContext):
         logger.info("Visión habilitada: el agente puede ver la pantalla del usuario")
 
     await session.start(**start_kwargs)
+
+    # Demo vendor agents greet first so the prospect doesn't have to initiate
+    if personality.get("is_demo") and not personality.get("has_demo_tools"):
+        await session.generate_reply(
+            instructions="Saluda al prospecto de forma breve y natural, preséntate y comienza tu pitch de ventas. No esperes a que el prospecto hable primero."
+        )
 
     # Keep process alive until notes finish generating
     await notes_done.wait()

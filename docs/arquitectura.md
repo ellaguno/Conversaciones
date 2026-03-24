@@ -62,6 +62,13 @@ Sistema de agentes conversacionales por voz en tiempo real, construido sobre Liv
 │  │       ConversationLog (todos los agentes)         │    │
 │  │  Guarda transcripciones .md por personalidad      │    │
 │  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │       Demo Venta de Seguros (/demo/seguros)       │    │
+│  │  4 personalidades + DemoTools (function calling)  │    │
+│  │  Evaluacion en vivo via LiveKit data channel      │    │
+│  │  Modelo: Gemini 3 Flash (preview)               │    │
+│  └──────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -85,9 +92,10 @@ Sistema de agentes conversacionales por voz en tiempo real, construido sobre Liv
 comerciante-con-voz/
 ├── agent/
 │   ├── agent.py              # Punto de entrada, AgentServer + entrypoint
-│   ├── personalities.py      # 11 personalidades, 5 metodos terapeuticos, prompts
+│   ├── personalities.py      # Personalidades, metodos terapeuticos, prompts
 │   ├── session_manager.py    # Persistencia de sesiones + therapy_config.json
 │   ├── therapy_tools.py      # Function calling tools para Dra. Ana
+│   ├── demo_tools.py         # Function calling tools para demo de seguros
 │   ├── note_generator.py     # Generacion automatica de notas post-sesion
 │   ├── conversation_log.py   # Log de conversaciones para todos los agentes
 │   ├── pyproject.toml        # Dependencias Python
@@ -113,6 +121,9 @@ comerciante-con-voz/
 │   │   ├── page.tsx
 │   │   ├── layout.tsx
 │   │   ├── login/page.tsx                    # Pagina de login
+│   │   ├── demo/seguros/                     # Demo venta de seguros (acceso publico)
+│   │   │   ├── page.tsx
+│   │   │   └── demo-seguros.tsx
 │   │   └── api/
 │   │       ├── auth/[...nextauth]/route.ts   # NextAuth handler
 │   │       ├── auth/password/route.ts        # Cambio de contrasena
@@ -220,6 +231,17 @@ Cada llamada LLM/TTS/STT emite evento "metrics_collected"
 | `imam` | Iman Ahmed | Manuel - Newsman | Iman musulman |
 | `rabino` | Rabino David | Manuel - Newsman | Rabino judio |
 | `pandit` | Pandit Arjun | Alejandro - Calm Mentor | Pandit hindu |
+
+### Demo: Venta de Seguros (acceso publico, Gemini 2.5 Flash)
+
+| Key | Nombre | Tipo | Descripcion |
+|-----|--------|------|-------------|
+| `demo_vendedor_vida` | Vendedor de Seguro de Vida | Vendedor | Vende seguro de vida (perfiles: agresivo/asertivo/pasivo) |
+| `demo_vendedor_gastos` | Vendedor de Gastos Medicos | Vendedor | Vende gastos medicos (perfiles: agresivo/asertivo/pasivo) |
+| `demo_cliente_vida` | Prospecto de Seguro de Vida | Prospecto | Simula cliente con evaluacion en vivo (perfiles: facil/normal/dificil) |
+| `demo_cliente_gastos` | Prospecto de Gastos Medicos | Prospecto | Simula cliente con evaluacion en vivo (perfiles: facil/normal/dificil) |
+
+Los prospectos usan function calling tools (`demo_tools.py`) para emitir estado emocional e intencion de compra via LiveKit data channel. Ver `docs/demo-seguros.md` para detalles completos.
 
 ## Enfoques Terapeuticos (Dra. Ana)
 

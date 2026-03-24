@@ -207,6 +207,10 @@ const PERSONALITY_SUBTITLE: Record<string, string> = {
   nutriologo_deportivo: 'Nutrióloga',
   nutriologo_pediatrico: 'Nutrióloga',
   nutriologo_bariatrico: 'Nutrióloga',
+  demo_vendedor_vida: 'Demo Seguros',
+  demo_vendedor_gastos: 'Demo Seguros',
+  demo_cliente_vida: 'Demo Seguros',
+  demo_cliente_gastos: 'Demo Seguros',
 };
 
 function getSubtitle(key: string): string {

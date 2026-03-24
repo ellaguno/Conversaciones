@@ -6,6 +6,7 @@ import {
   type VideoGrant,
 } from 'livekit-server-sdk';
 import { auth } from '@/lib/auth';
+import { sendEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
 import { readSettings } from '@/lib/settings';
 
@@ -69,6 +70,10 @@ const VALID_PERSONALITIES = new Set([
   'nutriologo_deportivo',
   'nutriologo_pediatrico',
   'nutriologo_bariatrico',
+  'demo_vendedor_vida',
+  'demo_vendedor_gastos',
+  'demo_cliente_vida',
+  'demo_cliente_gastos',
 ]);
 
 export const revalidate = 0;
@@ -87,12 +92,24 @@ export async function POST(req: Request) {
     let isGuest = false;
 
     if (!userId) {
-      const settings = readSettings();
-      if (!settings.guestEnabled) {
-        return new NextResponse('No autenticado', { status: 401 });
+      const body_peek = await req
+        .clone()
+        .json()
+        .catch(() => ({}));
+      const isDemo =
+        typeof body_peek?.personality === 'string' && body_peek.personality.startsWith('demo_');
+      if (isDemo) {
+        // Demo personalities don't require auth
+        userId = `demo_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        isGuest = true;
+      } else {
+        const settings = readSettings();
+        if (!settings.guestEnabled) {
+          return new NextResponse('No autenticado', { status: 401 });
+        }
+        userId = `guest_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        isGuest = true;
       }
-      userId = `guest_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      isGuest = true;
     }
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
@@ -119,6 +136,7 @@ export async function POST(req: Request) {
     const model = typeof body?.model === 'string' ? body.model : '';
     const therapyMethod = typeof body?.therapyMethod === 'string' ? body.therapyMethod : '';
     const coupleTherapy = body?.coupleTherapy === true;
+    const demoProfile = typeof body?.demoProfile === 'string' ? body.demoProfile : '';
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
@@ -140,6 +158,7 @@ export async function POST(req: Request) {
       ...(model && { model }),
       ...(therapyMethod && { therapyMethod }),
       ...(coupleTherapy && { coupleTherapy }),
+      ...(demoProfile && { demoProfile }),
     });
 
     await roomService.createRoom({
@@ -160,6 +179,35 @@ export async function POST(req: Request) {
       participantName,
       participantToken,
     };
+
+    // Notify demo usage via email (fire-and-forget)
+    if (personality.startsWith('demo_')) {
+      const DEMO_NOTIFY_EMAIL = 'eduardo@llaguno.com';
+      const now = new Date();
+      const hora = now.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+      const profileLabels: Record<string, string> = {
+        demo_vendedor_vida: 'Vendedor de Seguro de Vida',
+        demo_vendedor_gastos: 'Vendedor de Gastos Médicos',
+        demo_cliente_vida: 'Prospecto de Seguro de Vida',
+        demo_cliente_gastos: 'Prospecto de Gastos Médicos',
+      };
+      const agentLabel = profileLabels[personality] || personality;
+      const profileType = demoProfile || 'no especificado';
+      sendEmail(
+        DEMO_NOTIFY_EMAIL,
+        `Demo Seguros: ${agentLabel} (${profileType})`,
+        `<h3>Uso de Demo - Venta de Seguros</h3>
+        <table style="border-collapse:collapse;font-family:sans-serif;">
+          <tr><td style="padding:4px 12px;font-weight:bold;">Hora</td><td style="padding:4px 12px;">${hora}</td></tr>
+          <tr><td style="padding:4px 12px;font-weight:bold;">IP</td><td style="padding:4px 12px;">${ip}</td></tr>
+          <tr><td style="padding:4px 12px;font-weight:bold;">Usuario</td><td style="padding:4px 12px;">${userId}</td></tr>
+          <tr><td style="padding:4px 12px;font-weight:bold;">Agente</td><td style="padding:4px 12px;">${agentLabel}</td></tr>
+          <tr><td style="padding:4px 12px;font-weight:bold;">Perfil</td><td style="padding:4px 12px;">${profileType}</td></tr>
+          <tr><td style="padding:4px 12px;font-weight:bold;">Sala</td><td style="padding:4px 12px;">${roomName}</td></tr>
+        </table>`
+      ).catch((err) => console.error('Error enviando notificación demo:', err));
+    }
+
     const headers = new Headers({
       'Cache-Control': 'no-store',
     });

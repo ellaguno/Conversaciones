@@ -1,10 +1,26 @@
 import { NextResponse } from 'next/server';
-import { existsSync } from 'fs';
+import { existsSync, statSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import { auth } from '@/lib/auth';
 import { getUserSessionsDir } from '@/lib/data-paths';
 
 export const revalidate = 0;
+
+const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+function isGeneratingActive(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  try {
+    const age = Date.now() - statSync(filePath).mtimeMs;
+    if (age > STALE_THRESHOLD_MS) {
+      unlinkSync(filePath);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(req: Request) {
   try {
@@ -28,7 +44,7 @@ export async function GET(req: Request) {
       if (!resolve(patientDir).startsWith(resolve(sessionsBase))) {
         return NextResponse.json({ generating: false });
       }
-      const generating = existsSync(join(patientDir, '.generating'));
+      const generating = isGeneratingActive(join(patientDir, '.generating'));
       return NextResponse.json({ generating });
     }
 
@@ -39,7 +55,7 @@ export async function GET(req: Request) {
       for (const d of dirs) {
         if (d.includes('_deleted_')) continue;
         const genFile = join(sessionsBase, d, '.generating');
-        if (existsSync(genFile)) {
+        if (isGeneratingActive(genFile)) {
           return NextResponse.json({ generating: true, patientId: d });
         }
       }
