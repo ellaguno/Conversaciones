@@ -364,6 +364,7 @@ export function ViewController({
           audioVisualizerRadialBarCount={appConfig.audioVisualizerRadialBarCount}
           audioVisualizerRadialRadius={appConfig.audioVisualizerRadialRadius}
           audioVisualizerWaveLineWidth={appConfig.audioVisualizerWaveLineWidth}
+          isAdmin={isGuest ? false : isAdmin}
           className="fixed inset-0"
         />
       )}

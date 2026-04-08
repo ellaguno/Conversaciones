@@ -156,6 +156,8 @@ export interface AgentSessionView_01Props {
   audioVisualizerWaveLineWidth?: number;
   /** Optional class name merged onto the outer `<section>` container. */
   className?: string;
+  /** When true, shows token/cost metrics overlay (admins only). */
+  isAdmin?: boolean;
 }
 
 const PERSONALITY_SUBTITLE: Record<string, string> = {
@@ -231,11 +233,12 @@ function useSessionTimer() {
   return `${min}:${sec.toString().padStart(2, '0')}`;
 }
 
-function useMetricsPoller() {
+function useMetricsPoller(enabled: boolean) {
   const [metrics, setMetrics] = useState<{ total_tokens: number; total_cost_usd: number } | null>(
     null
   );
   useEffect(() => {
+    if (!enabled) return;
     const poll = () =>
       fetch('/api/metrics')
         .then((r) => r.json())
@@ -244,7 +247,7 @@ function useMetricsPoller() {
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [enabled]);
   return metrics;
 }
 
@@ -265,6 +268,7 @@ export function AgentSessionView_01({
   audioVisualizerRadialBarCount,
   audioVisualizerRadialRadius,
   audioVisualizerWaveLineWidth,
+  isAdmin = false,
   ref,
   className,
   ...props
@@ -275,7 +279,7 @@ export function AgentSessionView_01({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { state: agentState } = useAgent();
   const timer = useSessionTimer();
-  const metrics = useMetricsPoller();
+  const metrics = useMetricsPoller(isAdmin);
 
   const controls: AgentControlBarControls = {
     leave: true,
@@ -309,7 +313,7 @@ export function AgentSessionView_01({
           <p className="text-muted-foreground text-xs">{getSubtitle(personality ?? '')}</p>
         </div>
         <div className="flex items-center gap-3">
-          {metrics && metrics.total_tokens > 0 && (
+          {isAdmin && metrics && metrics.total_tokens > 0 && (
             <div className="border-border bg-background/80 text-muted-foreground rounded-full border px-3 py-1 font-mono text-[10px] backdrop-blur-sm">
               {metrics.total_tokens.toLocaleString()} tok &middot; $
               {metrics.total_cost_usd.toFixed(4)}

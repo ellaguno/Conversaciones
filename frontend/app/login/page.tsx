@@ -270,6 +270,9 @@ function LoginForm() {
           </div>
         )}
       </div>
+      <p className="text-foreground absolute right-0 bottom-6 left-0 text-center text-xs font-bold">
+        Servicio de 8am a 8pm hora central de México
+      </p>
       <span className="text-muted-foreground absolute right-4 bottom-3 text-[10px]">
         v{process.env.NEXT_PUBLIC_APP_VERSION}
       </span>

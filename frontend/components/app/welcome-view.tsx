@@ -1298,7 +1298,10 @@ export const WelcomeView = ({
             </>
           )}
         </div>
-        <span className="text-muted-foreground mt-4 text-[10px]">
+        <p className="text-foreground mt-4 text-center text-xs font-bold">
+          Servicio de 8am a 8pm hora central de México
+        </p>
+        <span className="text-muted-foreground mt-1 text-[10px]">
           v{process.env.NEXT_PUBLIC_APP_VERSION}
         </span>
       </section>
