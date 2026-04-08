@@ -204,7 +204,13 @@ async def entrypoint(ctx: JobContext):
         manager = SessionManager(patient_id=patient_id or "default", user_id=user_id)
         tools = create_therapy_tools(manager)
 
-        if manager.is_first_session():
+        # "First session" = no therapy config persisted yet for this patient.
+        # We use therapy_config.json (not perfil.md) because perfil.md is only
+        # written after notes are generated; if the user cuts the first session
+        # short, perfil.md never appears and the next connection would otherwise
+        # be re-treated as a first session and overwrite the chosen method.
+        has_stored_config = (manager.patient_dir / "therapy_config.json").exists()
+        if not has_stored_config:
             # First session: use therapy method from metadata (selected by user)
             method_key = therapy_method if therapy_method in THERAPY_METHODS else DEFAULT_THERAPY_METHOD
             method_info = THERAPY_METHODS[method_key]
@@ -212,9 +218,21 @@ async def entrypoint(ctx: JobContext):
             if couple_therapy:
                 instructions += DRA_ANA_COUPLE_ADDON
             instructions += "\n\n" + DRA_ANA_INTAKE_PROMPT
-            # Store therapy config so agent knows to save it in profile
+            # Persist the chosen config so subsequent connections honor it
             manager.save_therapy_config(method_key, couple_therapy)
             logger.info(f"Primera sesión (intake) - Método: {method_info['name']}, Pareja: {couple_therapy}")
+        elif manager.is_first_session():
+            # Config exists but no profile yet (previous first session was too
+            # short to generate notes). Reuse stored config and run intake again.
+            stored_config = manager.get_therapy_config()
+            method_key = stored_config.get("method", DEFAULT_THERAPY_METHOD)
+            is_couple = stored_config.get("couple", False)
+            if method_key in THERAPY_METHODS:
+                instructions += f"\n\n--- ENFOQUE TERAPÉUTICO ---\n{THERAPY_METHODS[method_key]['description']}"
+            if is_couple:
+                instructions += DRA_ANA_COUPLE_ADDON
+            instructions += "\n\n" + DRA_ANA_INTAKE_PROMPT
+            logger.info(f"Re-intake (sin perfil aún) - Método: {method_key}, Pareja: {is_couple}")
         else:
             # Follow-up: read therapy method from stored config
             stored_config = manager.get_therapy_config()

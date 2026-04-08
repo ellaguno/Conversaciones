@@ -67,7 +67,7 @@ class SessionManager:
                 return json.loads(config_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, TypeError):
                 pass
-        return {"method": "cbt", "couple": False}
+        return {"method": "mindfulness", "couple": False}
 
     # --- Read files ---
 
