@@ -586,22 +586,30 @@ export const WelcomeView = ({
 
         {/* Plática mode entry point. The full list/CRUD lives at /platicas; here
             we only show a compact link plus auto-start (handled in PlaticaAutoStart
-            below) when the user comes from the list with a selection in flight. */}
-        <PlaticaAutoStart onStartCall={onStartCall} />
-        <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
-              Pláticas con presentación
-            </span>
-            <span className="text-muted-foreground text-[11px]">PDF + guion + agente narrador</span>
-          </div>
-          <Link
-            href="/platicas"
-            className="rounded-full bg-amber-600 px-3 py-1.5 font-mono text-[11px] font-bold tracking-wider text-white uppercase hover:bg-amber-700"
-          >
-            Mis pláticas
-          </Link>
-        </div>
+            below) when the user comes from the list with a selection in flight.
+            Hidden for guest users — same policy as Psicóloga / Nutrióloga: las
+            pláticas se persisten por usuario y los invitados no tienen storage. */}
+        {!isGuest && (
+          <>
+            <PlaticaAutoStart onStartCall={onStartCall} />
+            <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
+                  Pláticas con presentación
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  PDF + guion + agente narrador
+                </span>
+              </div>
+              <Link
+                href="/platicas"
+                className="rounded-full bg-amber-600 px-3 py-1.5 font-mono text-[11px] font-bold tracking-wider text-white uppercase hover:bg-amber-700"
+              >
+                Mis pláticas
+              </Link>
+            </div>
+          </>
+        )}
 
         {preselectedBanner && (
           <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border-2 border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-2.5">
@@ -670,7 +678,7 @@ export const WelcomeView = ({
 
         <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
           {visiblePersonalities
-            .filter((p) => !(isGuest && p.key === 'psicologo'))
+            .filter((p) => !(isGuest && (p.key === 'psicologo' || p.key === 'nutriologa')))
             .map((p) => (
               <button
                 key={p.key}
