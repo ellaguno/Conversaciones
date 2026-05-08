@@ -90,10 +90,57 @@ export function writePdf(platicaId: string, pdfBuffer: Buffer): string {
   return pdfPath;
 }
 
+export const SLIDE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const;
+export type SlideExtension = (typeof SLIDE_EXTENSIONS)[number];
+
+export const SLIDE_MIME_TYPES: Record<SlideExtension, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
+
+// Default render path (PNG); kept for the pdftoppm pipeline. Per-slide replacements
+// may write a different extension — use findSlidePath to resolve at read time.
 export function getSlidePath(platicaId: string, slideNumber: number): string {
   const dir = getPlaticaDir(platicaId);
   const padded = String(slideNumber).padStart(3, '0');
   return join(dir, 'slides', `${padded}.png`);
+}
+
+// Resolves whichever extension is currently on disk for this slide. Returns null
+// if no file exists. PNG is checked first since pdftoppm writes PNG.
+export function findSlidePath(
+  platicaId: string,
+  slideNumber: number
+): { path: string; ext: SlideExtension } | null {
+  const dir = getPlaticaDir(platicaId);
+  const padded = String(slideNumber).padStart(3, '0');
+  for (const ext of SLIDE_EXTENSIONS) {
+    const p = join(dir, 'slides', `${padded}.${ext}`);
+    if (existsSync(p)) return { path: p, ext };
+  }
+  return null;
+}
+
+// Replaces the image for a single slide. Removes any existing extension variant
+// for this slide, then writes the new file with the supplied extension.
+export function writeSlideImage(
+  platicaId: string,
+  slideNumber: number,
+  buffer: Buffer,
+  ext: SlideExtension
+): void {
+  const dir = getPlaticaDir(platicaId);
+  const slidesDir = join(dir, 'slides');
+  if (!existsSync(slidesDir)) mkdirSync(slidesDir, { recursive: true });
+  const padded = String(slideNumber).padStart(3, '0');
+  // Drop any prior variant so only one image per slide exists on disk.
+  for (const e of SLIDE_EXTENSIONS) {
+    const p = join(slidesDir, `${padded}.${e}`);
+    if (existsSync(p)) rmSync(p);
+  }
+  writeFileSync(join(slidesDir, `${padded}.${ext}`), buffer);
 }
 
 export function deletePlatica(platicaId: string): void {
@@ -147,9 +194,12 @@ export async function renderPdfToPngs(platicaId: string, pdfPath: string): Promi
   const dir = getPlaticaDir(platicaId);
   const slidesDir = join(dir, 'slides');
   if (!existsSync(slidesDir)) mkdirSync(slidesDir, { recursive: true });
-  // Clean any prior renders so we don't mix counts on re-upload.
+  // Clean any prior renders / per-slide replacements so we don't mix counts
+  // on re-upload. Sweeps every supported slide extension, not just PNG.
   for (const f of readdirSync(slidesDir)) {
-    if (f.endsWith('.png')) rmSync(join(slidesDir, f));
+    if (SLIDE_EXTENSIONS.some((e) => f.endsWith(`.${e}`))) {
+      rmSync(join(slidesDir, f));
+    }
   }
   const rootName = 'page';
   await execFileAsync('pdftoppm', [
