@@ -32,6 +32,11 @@ export default function PlaticasListPage() {
   const startPlatica = (id: string, personality: string) => {
     sessionStorage.setItem('pending_platica_id', id);
     sessionStorage.setItem('pending_platica_personality', personality);
+    // Abre la proyección en otro tab automáticamente — el flujo "operador
+    // + proyección" siempre necesita ambas pantallas. window.open va antes
+    // del router.push para que el browser no lo bloquee como popup
+    // (estamos dentro del click handler).
+    window.open(`/presentar/${id}`, '_blank', 'noopener,noreferrer');
     router.push('/');
   };
 
@@ -112,20 +117,27 @@ export default function PlaticasListPage() {
                   </div>
                 </div>
                 <div className="ml-3 flex shrink-0 items-center gap-2">
-                  <Link
-                    href={`/presentar/${p.id}`}
-                    target="_blank"
-                    className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
-                    title="Solo proyección — sin audio (requiere otro device para conversar con el agente)"
-                  >
-                    proyección
-                  </Link>
-                  <Link
-                    href={`/platicas/${p.id}/editar`}
-                    className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
-                  >
-                    editar
-                  </Link>
+                  {/* Pareja "Proyección + Iniciar": la proyección puede abrirse
+                      sola desde otro device, pero al picar Iniciar también se
+                      abre automáticamente en un tab nuevo — por eso van juntas
+                      visualmente como un button group con borde compartido. */}
+                  <div className="inline-flex items-stretch overflow-hidden rounded-full border border-amber-600">
+                    <Link
+                      href={`/presentar/${p.id}`}
+                      target="_blank"
+                      className="border-r border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
+                      title="Solo proyección — útil si vas a abrirla manualmente en otro device"
+                    >
+                      Proyección
+                    </Link>
+                    <button
+                      onClick={() => startPlatica(p.id, p.personality_key)}
+                      className="bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-white uppercase hover:bg-amber-700"
+                      title="Inicia la sesión de chat (operador) Y abre la proyección en otro tab automáticamente"
+                    >
+                      Iniciar
+                    </button>
+                  </div>
                   <Link
                     href={`/presentar/${p.id}?mode=live`}
                     target="_blank"
@@ -134,13 +146,12 @@ export default function PlaticasListPage() {
                   >
                     Todo en uno
                   </Link>
-                  <button
-                    onClick={() => startPlatica(p.id, p.personality_key)}
-                    className="rounded-full bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-white uppercase hover:bg-amber-700"
-                    title="Iniciar la sesión de chat (operador) — proyección en otra pantalla"
+                  <Link
+                    href={`/platicas/${p.id}/editar`}
+                    className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
                   >
-                    Iniciar
-                  </button>
+                    editar
+                  </Link>
                   <button
                     onClick={() => deletePlatica(p.id, p.title)}
                     disabled={busyId === p.id}
