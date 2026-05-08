@@ -173,9 +173,31 @@ function LiveModeConnected({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Hoisted al nivel del Provider para poder mutear el RoomAudioRenderer
+  // cuando estamos en un slide con video — Phase 1 del soporte de YouTube.
+  // El agente sigue corriendo (sigue "pensando" su narración), pero el
+  // usuario solo escucha al video. Cuando el slide cambia a uno sin media,
+  // el audio del agente regresa.
+  const projection = useProjection(id, manifest, guion);
+  const currentBlock = guion.blocks.find((b) => b.slide === projection.currentSlide);
+  const isMediaSlide = !!currentBlock?.media;
+
+  // Volumen del orador, controlado por el slider de la barra inferior.
+  // RoomAudioRenderer toma 0..1 (la HTML <audio>.volume es 0..1, no admite
+  // boost arriba de 1). Si necesitas más ganancia que el máximo, hay que
+  // meter Web Audio + GainNode — futuro.
+  const [audioVolume, setAudioVolume] = useState(1.0);
+
   return (
-    <AgentSessionProvider session={session}>
-      <LiveProjection id={id} manifest={manifest} guion={guion} />
+    <AgentSessionProvider session={session} muted={isMediaSlide} volume={audioVolume}>
+      <LiveProjection
+        id={id}
+        manifest={manifest}
+        guion={guion}
+        projection={projection}
+        audioVolume={audioVolume}
+        setAudioVolume={setAudioVolume}
+      />
     </AgentSessionProvider>
   );
 }
@@ -184,13 +206,18 @@ function LiveProjection({
   id,
   manifest,
   guion,
+  projection,
+  audioVolume,
+  setAudioVolume,
 }: {
   id: string;
   manifest: PlaticaManifest;
   guion: PlaticaGuion;
+  projection: ReturnType<typeof useProjection>;
+  audioVolume: number;
+  setAudioVolume: (v: number) => void;
 }) {
   const router = useRouter();
-  const projection = useProjection(id, manifest, guion);
 
   return (
     <>
@@ -203,6 +230,8 @@ function LiveProjection({
         onLeave={() => router.push('/platicas')}
         onPrev={() => projection.navigatePrev()}
         onNext={() => projection.navigateNext()}
+        volume={audioVolume}
+        onVolumeChange={setAudioVolume}
       />
     </>
   );
@@ -369,10 +398,14 @@ function BottomControls({
   onLeave,
   onPrev,
   onNext,
+  volume,
+  onVolumeChange,
 }: {
   onLeave: () => void;
   onPrev: () => void;
   onNext: () => void;
+  volume: number;
+  onVolumeChange: (v: number) => void;
 }) {
   const [visible, setVisible] = useState(true);
   const { localParticipant } = useLocalParticipant();
@@ -431,6 +464,26 @@ function BottomControls({
           {micEnabled ? '🎤' : '🔇'}
         </button>
         <div className="mx-1 h-4 w-px bg-white/20" />
+        <div
+          className="flex items-center gap-1.5 px-1.5"
+          title="Volumen del orador"
+          aria-label="Volumen del orador"
+        >
+          <span className="text-xs">🔊</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volume}
+            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            className="h-1 w-20 cursor-pointer accent-amber-500"
+          />
+          <span className="font-mono text-[10px] text-white/60 tabular-nums">
+            {Math.round(volume * 100)}
+          </span>
+        </div>
+        <div className="mx-1 h-4 w-px bg-white/20" />
         <button
           type="button"
           onClick={onLeave}
@@ -454,18 +507,66 @@ function FullScreenMessage({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Player real para slides con media. YouTube hoy; audio queda como placeholder
+// hasta que lo necesitemos. El iframe se remonta en cada cambio de slide
+// (`key={block.slide}-{video_id}`) para que el video reinicie limpio si el
+// usuario regresa al mismo slide.
 function MediaPlaceholder({ block }: { block: PlaticaGuion['blocks'][number] }) {
   const m = block.media!;
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Autoplay workaround: el `autoplay=1` del URL es ignorado por el browser
+  // cuando un tab nuevo no tiene "user activation" (window.open desde otro
+  // tab no la propaga). Con `enablejsapi=1` podemos mandar `playVideo` por
+  // postMessage; lo intentamos varias veces porque el iframe tarda en cargar.
+  // Si la policy bloquea aun así (no hay interacción local), el video se queda
+  // pausado pero el usuario puede darle click directamente.
+  useEffect(() => {
+    if (m.type !== 'youtube' || !m.video_id) return;
+    const send = () => {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: 'playVideo', args: [] }),
+        'https://www.youtube.com'
+      );
+    };
+    const timers = [400, 900, 1800, 3500].map((d) => setTimeout(send, d));
+    return () => timers.forEach(clearTimeout);
+  }, [m.type, m.video_id]);
+
+  if (m.type === 'youtube' && m.video_id) {
+    const params = new URLSearchParams({
+      autoplay: m.autoplay !== false ? '1' : '0',
+      rel: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      enablejsapi: '1',
+    });
+    if (m.start_sec) params.set('start', String(m.start_sec));
+    if (m.end_sec) params.set('end', String(m.end_sec));
+    const src = `https://www.youtube.com/embed/${m.video_id}?${params.toString()}`;
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
+        <div className="aspect-video h-full max-h-full w-full max-w-full">
+          <iframe
+            ref={iframeRef}
+            key={`${block.slide}-${m.video_id}`}
+            src={src}
+            title={`Video del slide ${block.slide}`}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            className="h-full w-full border-0"
+          />
+        </div>
+      </div>
+    );
+  }
+  // Audio (no implementado) o media inválido: caemos a placeholder informativo.
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 font-mono text-white">
       <div className="space-y-2 text-center">
         <div className="text-xs tracking-widest text-white/50 uppercase">Media en este slide</div>
-        <div className="text-2xl">
-          {m.type === 'youtube' ? `YouTube: ${m.video_id ?? m.url}` : `Audio: ${m.url}`}
-        </div>
-        <div className="text-sm text-white/50">
-          (Reproducción se implementa en una iteración posterior.)
-        </div>
+        <div className="text-2xl">{m.type === 'audio' ? `Audio: ${m.url}` : 'Media inválido'}</div>
+        <div className="text-sm text-white/50">(Solo YouTube está soportado por ahora.)</div>
       </div>
     </div>
   );

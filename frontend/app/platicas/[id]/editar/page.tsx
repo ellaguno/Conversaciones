@@ -966,6 +966,7 @@ function BlockEditor({
             className="input text-xs"
             placeholder="Talking points (uno por línea)"
           />
+          <MediaInput block={block} onChange={onChange} />
         </div>
 
         <div className="sm:w-72 sm:shrink-0">
@@ -1010,6 +1011,109 @@ function BlockEditor({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Parser de URL de YouTube → {video_id, start_sec}. Acepta watch?v=, youtu.be,
+// embed/, shorts/, o el ID pelado. Devuelve null si la URL no es de YouTube.
+function parseYoutubeUrl(input: string): { video_id: string; start_sec?: number } | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  // ID pelado (11 chars).
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return { video_id: trimmed };
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^www\./, '');
+  let videoId: string | null = null;
+  if (host === 'youtu.be') {
+    videoId = url.pathname.slice(1).split('/')[0] || null;
+  } else if (host === 'youtube.com' || host === 'm.youtube.com' || host.endsWith('.youtube.com')) {
+    if (url.pathname === '/watch') {
+      videoId = url.searchParams.get('v');
+    } else if (url.pathname.startsWith('/embed/')) {
+      videoId = url.pathname.split('/')[2] || null;
+    } else if (url.pathname.startsWith('/shorts/')) {
+      videoId = url.pathname.split('/')[2] || null;
+    }
+  }
+  if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) return null;
+  // Start time: ?t=30, ?t=30s, ?t=1m20s, ?start=30
+  const t = url.searchParams.get('t') || url.searchParams.get('start');
+  let startSec: number | undefined;
+  if (t) {
+    const m = t.match(/^(?:(\d+)m)?(\d+)s?$/);
+    if (m) startSec = (parseInt(m[1] || '0', 10) || 0) * 60 + parseInt(m[2], 10);
+    else if (/^\d+$/.test(t)) startSec = parseInt(t, 10);
+  }
+  return startSec !== undefined
+    ? { video_id: videoId, start_sec: startSec }
+    : { video_id: videoId };
+}
+
+function MediaInput({
+  block,
+  onChange,
+}: {
+  block: GuionBlock;
+  onChange: (patch: Partial<GuionBlock>) => void;
+}) {
+  // Estado local del input de URL — solo refleja el media actual al primer
+  // render. El usuario edita libremente y solo escribimos `media` cuando la
+  // URL parsea bien (o cuando borra el input → media = undefined).
+  const [text, setText] = useState<string>(() => {
+    if (!block.media || block.media.type !== 'youtube') return '';
+    return block.media.video_id ? `https://youtu.be/${block.media.video_id}` : '';
+  });
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  const apply = (raw: string) => {
+    setText(raw);
+    if (!raw.trim()) {
+      setParseError(null);
+      onChange({ media: undefined });
+      return;
+    }
+    const parsed = parseYoutubeUrl(raw);
+    if (!parsed) {
+      setParseError('URL de YouTube no reconocida');
+      return;
+    }
+    setParseError(null);
+    onChange({
+      media: {
+        type: 'youtube',
+        video_id: parsed.video_id,
+        ...(parsed.start_sec !== undefined && { start_sec: parsed.start_sec }),
+        autoplay: true,
+      },
+    });
+  };
+
+  const hasMedia = block.media?.type === 'youtube' && !!block.media.video_id;
+
+  return (
+    <div className="space-y-1">
+      <label className="text-muted-foreground flex items-center gap-2 text-[11px]">
+        <span className="font-mono tracking-wider uppercase">Video YouTube</span>
+        {hasMedia && (
+          <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-red-700 dark:text-red-300">
+            ▶ silencia al orador
+          </span>
+        )}
+      </label>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => apply(e.target.value)}
+        placeholder="https://www.youtube.com/watch?v=… (vacío = sin video)"
+        className="input text-xs"
+      />
+      {parseError && <div className="text-xs text-red-600 dark:text-red-400">{parseError}</div>}
     </div>
   );
 }
