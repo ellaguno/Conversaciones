@@ -10,16 +10,21 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CARTESIA_VOICES_ES } from '@/lib/personalities-config';
-import type { AdvanceMode, GuionBlock, PlaticaGuion } from '@/lib/platica-schema';
+import {
+  type AdvanceMode,
+  DEFAULT_PRESENTER,
+  type GuionBlock,
+  type PlaticaGuion,
+  type PresenterGender,
+} from '@/lib/platica-schema';
 
 type GuionMode = 'doc' | 'auto' | 'json';
 
-const PRESENTER_PERSONALITIES: { key: string; label: string }[] = [
-  { key: 'tato', label: 'Tato — Vecino cálido (default para audiencias adultas mayores)' },
-  { key: 'ia_honesta', label: 'I.A. Honesta — Tono directo, sin adornos' },
-  { key: 'instructor_historia', label: 'Profesor de Historia' },
-  { key: 'coach_oratoria', label: 'Coach de Oratoria' },
-];
+// Cartesia voice id → 'hombre' | 'mujer'. Cuando el usuario elige voz, sincroniza
+// el género para que las concordancias del LLM coincidan con cómo suena.
+const VOICE_GENDER_MAP: Record<string, PresenterGender> = Object.fromEntries(
+  CARTESIA_VOICES_ES.map((v) => [v.id, v.gender === 'F' ? 'mujer' : 'hombre'])
+);
 
 const ADVANCE_MODE_DESCRIPTIONS: Record<AdvanceMode, { label: string; help: string }> = {
   hybrid: {
@@ -76,8 +81,10 @@ export default function NuevaPlaticaPage() {
 
   // Metadata
   const [title, setTitle] = useState('');
-  const [personality, setPersonality] = useState('tato');
-  const [voiceId, setVoiceId] = useState('');
+  const [presenterName, setPresenterName] = useState<string>(DEFAULT_PRESENTER.name);
+  const [presenterGender, setPresenterGender] = useState<PresenterGender>(DEFAULT_PRESENTER.gender);
+  const [presenterPersona, setPresenterPersona] = useState<string>(DEFAULT_PRESENTER.persona);
+  const [voiceId, setVoiceId] = useState<string>(DEFAULT_PRESENTER.voice_id);
   const [model, setModel] = useState('');
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('hybrid');
   const [audience, setAudience] = useState('');
@@ -214,7 +221,10 @@ export default function NuevaPlaticaPage() {
 
     const manifest = {
       title: title.trim(),
-      personality_key: personality,
+      personality_key: 'custom',
+      presenter_name: presenterName.trim() || undefined,
+      presenter_gender: presenterGender,
+      presenter_persona: presenterPersona.trim() || undefined,
       audience_profile: audience.trim(),
       narrative_tone: tone.trim(),
       advance_mode: advanceMode,
@@ -271,30 +281,40 @@ export default function NuevaPlaticaPage() {
             />
           </Field>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Personalidad del presentador" required>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field label="Nombre" required>
+              <input
+                type="text"
+                value={presenterName}
+                onChange={(e) => setPresenterName(e.target.value)}
+                required
+                className="input"
+                placeholder="Tato"
+              />
+            </Field>
+            <Field label="Género" required>
               <select
-                value={personality}
-                onChange={(e) => setPersonality(e.target.value)}
+                value={presenterGender}
+                onChange={(e) => setPresenterGender(e.target.value as PresenterGender)}
                 className="input"
               >
-                {PRESENTER_PERSONALITIES.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
+                <option value="hombre">Hombre</option>
+                <option value="mujer">Mujer</option>
               </select>
             </Field>
-            <Field
-              label="Voz (opcional)"
-              help="Si la dejas en blanco, se usa la voz default de la personalidad."
-            >
+            <Field label="Voz">
               <select
                 value={voiceId}
-                onChange={(e) => setVoiceId(e.target.value)}
+                onChange={(e) => {
+                  const newVoice = e.target.value;
+                  setVoiceId(newVoice);
+                  // Realinea género con la voz seleccionada (concordancias).
+                  const inferred = newVoice ? VOICE_GENDER_MAP[newVoice] : undefined;
+                  if (inferred) setPresenterGender(inferred);
+                }}
                 className="input"
               >
-                <option value="">— voz default de la personalidad —</option>
+                <option value="">— sin asignar —</option>
                 {CARTESIA_VOICES_ES.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name}
@@ -303,6 +323,20 @@ export default function NuevaPlaticaPage() {
               </select>
             </Field>
           </div>
+
+          <Field
+            label="Personalidad del presentador"
+            required
+            help="Texto que se inyecta como system prompt del agente. Define cómo habla, qué reglas sigue y su tono."
+          >
+            <textarea
+              value={presenterPersona}
+              onChange={(e) => setPresenterPersona(e.target.value)}
+              required
+              rows={10}
+              className="input text-sm"
+            />
+          </Field>
 
           <Field
             label="Modelo de IA (OpenRouter, opcional)"

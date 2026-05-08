@@ -50,6 +50,12 @@ class PlaticaManifest:
     advance_mode: str = "hybrid"  # 'auto' | 'on_cue' | 'hybrid'
     voice_id: str | None = None  # overrides personality default if set
     model: str | None = None  # OpenRouter model id; overrides personality model
+    # Presenter en texto libre — si presenter_persona está presente, sustituye
+    # al system_prompt que vendría de personality_key. presenter_name/gender se
+    # usan para concordancias en la introducción del prompt.
+    presenter_name: str | None = None
+    presenter_gender: str | None = None  # 'hombre' | 'mujer'
+    presenter_persona: str | None = None
     glossary: dict[str, str] = field(default_factory=dict)
     story_arcs: list[dict] = field(default_factory=list)
     key_moments: list[int] = field(default_factory=list)
@@ -77,10 +83,14 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
         if advance_mode not in ("auto", "on_cue", "hybrid"):
             logger.warning(f"advance_mode inválido '{advance_mode}', usando 'hybrid'")
             advance_mode = "hybrid"
+        gender = m.get("presenter_gender")
+        if gender not in ("hombre", "mujer", None):
+            logger.warning(f"presenter_gender inválido '{gender}', ignorando")
+            gender = None
         manifest = PlaticaManifest(
             id=m["id"],
             title=m["title"],
-            personality_key=m["personality_key"],
+            personality_key=m.get("personality_key") or "custom",
             owner_user_id=m["owner_user_id"],
             slide_count=int(m["slide_count"]),
             audience_profile=m.get("audience_profile", ""),
@@ -88,6 +98,9 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
             advance_mode=advance_mode,
             voice_id=(m.get("voice_id") or None),
             model=(m.get("model") or None),
+            presenter_name=(m.get("presenter_name") or None),
+            presenter_gender=gender,
+            presenter_persona=(m.get("presenter_persona") or None),
             glossary=m.get("glossary", {}) or {},
             story_arcs=m.get("story_arcs", []) or [],
             key_moments=m.get("key_moments", []) or [],

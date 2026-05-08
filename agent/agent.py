@@ -218,6 +218,25 @@ async def entrypoint(ctx: JobContext):
     instructions = personality["system_prompt"]
     manager = None
 
+    # Plática con presenter_persona en texto libre: sustituye el system_prompt
+    # de la personalidad por el texto que el usuario escribió en el formulario.
+    # Si además hay nombre/género, los anteponemos como una línea breve para
+    # asegurar concordancias correctas (presentador/presentadora) sin depender
+    # de que el usuario lo haya escrito.
+    if platica is not None and platica.manifest.presenter_persona:
+        prefix_parts: list[str] = []
+        if platica.manifest.presenter_name:
+            label = (
+                "presentadora" if platica.manifest.presenter_gender == "mujer" else "presentador"
+            )
+            prefix_parts.append(f"Te llamas {platica.manifest.presenter_name} y eres {label}.")
+        prefix = ("\n".join(prefix_parts) + "\n\n") if prefix_parts else ""
+        instructions = prefix + platica.manifest.presenter_persona
+        logger.info(
+            f"Plática usa presenter_persona libre — nombre={platica.manifest.presenter_name}, "
+            f"género={platica.manifest.presenter_gender}"
+        )
+
     if personality.get("has_therapy_tools"):
         # Dra. Ana with full session management + therapy tools
         manager = SessionManager(patient_id=patient_id or "default", user_id=user_id)

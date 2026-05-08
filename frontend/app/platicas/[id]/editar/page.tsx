@@ -9,14 +9,20 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { CARTESIA_VOICES_ES } from '@/lib/personalities-config';
-import type { AdvanceMode, GuionBlock, PlaticaGuion, PlaticaManifest } from '@/lib/platica-schema';
+import {
+  type AdvanceMode,
+  DEFAULT_PRESENTER,
+  type GuionBlock,
+  type PlaticaGuion,
+  type PlaticaManifest,
+  type PresenterGender,
+} from '@/lib/platica-schema';
 
-const PRESENTER_PERSONALITIES: { key: string; label: string }[] = [
-  { key: 'tato', label: 'Tato — Vecino cálido' },
-  { key: 'ia_honesta', label: 'I.A. Honesta' },
-  { key: 'instructor_historia', label: 'Profesor de Historia' },
-  { key: 'coach_oratoria', label: 'Coach de Oratoria' },
-];
+// Cartesia voice id → 'hombre' | 'mujer' (derivado del campo gender de
+// CARTESIA_VOICES_ES) para autollenar el campo Género al elegir voz.
+const VOICE_GENDER_MAP: Record<string, PresenterGender> = Object.fromEntries(
+  CARTESIA_VOICES_ES.map((v) => [v.id, v.gender === 'F' ? 'mujer' : 'hombre'])
+);
 
 const ADVANCE_MODE_DESCRIPTIONS: Record<AdvanceMode, { label: string; help: string }> = {
   hybrid: {
@@ -62,7 +68,17 @@ export default function EditarPlaticaPage() {
       .then((data) => {
         const m = data.manifest as PlaticaManifest;
         const g = data.guion as PlaticaGuion;
-        setManifest(m);
+        // Pláticas legacy guardaban personality_key sin presenter_*. Prealimenta
+        // los nuevos campos con el default (Tato) para que la UI tenga algo
+        // editable; el manifest solo se actualiza al guardar.
+        const seeded: PlaticaManifest = {
+          ...m,
+          presenter_name: m.presenter_name ?? DEFAULT_PRESENTER.name,
+          presenter_gender: m.presenter_gender ?? DEFAULT_PRESENTER.gender,
+          presenter_persona: m.presenter_persona ?? DEFAULT_PRESENTER.persona,
+          voice_id: m.voice_id ?? DEFAULT_PRESENTER.voice_id,
+        };
+        setManifest(seeded);
         setBlocks(g.blocks);
         setGlossaryText(m.glossary ? JSON.stringify(m.glossary, null, 2) : '');
       })
@@ -169,6 +185,9 @@ export default function EditarPlaticaPage() {
     const manifestPatch = {
       title: manifest.title,
       personality_key: manifest.personality_key,
+      presenter_name: manifest.presenter_name?.trim() || undefined,
+      presenter_gender: manifest.presenter_gender,
+      presenter_persona: manifest.presenter_persona?.trim() || undefined,
       audience_profile: manifest.audience_profile,
       narrative_tone: manifest.narrative_tone,
       advance_mode: manifest.advance_mode,
@@ -280,34 +299,46 @@ export default function EditarPlaticaPage() {
             />
           </Field>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Personalidad del presentador" required>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field label="Nombre" required>
+              <input
+                type="text"
+                value={manifest.presenter_name ?? ''}
+                onChange={(e) => updateManifest({ presenter_name: e.target.value })}
+                required
+                className="input"
+                placeholder="Tato"
+              />
+            </Field>
+            <Field label="Género" required>
               <select
-                value={manifest.personality_key}
-                onChange={(e) => updateManifest({ personality_key: e.target.value })}
+                value={manifest.presenter_gender ?? 'hombre'}
+                onChange={(e) =>
+                  updateManifest({ presenter_gender: e.target.value as PresenterGender })
+                }
                 className="input"
               >
-                {PRESENTER_PERSONALITIES.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-                {/* Si el manifest tiene una personality que no está en la lista,
-                    la mostramos como opción extra para no perder el valor. */}
-                {!PRESENTER_PERSONALITIES.some((p) => p.key === manifest.personality_key) && (
-                  <option value={manifest.personality_key}>
-                    {manifest.personality_key} (custom)
-                  </option>
-                )}
+                <option value="hombre">Hombre</option>
+                <option value="mujer">Mujer</option>
               </select>
             </Field>
-            <Field label="Voz (opcional)">
+            <Field label="Voz">
               <select
                 value={manifest.voice_id ?? ''}
-                onChange={(e) => updateManifest({ voice_id: e.target.value || undefined })}
+                onChange={(e) => {
+                  const newVoice = e.target.value || undefined;
+                  // Cuando cambias voz, el género se realinea con la voz nueva
+                  // para que las concordancias del LLM (presentador/presentadora)
+                  // coincidan con cómo suena. El usuario puede sobrescribirlo.
+                  const inferred = newVoice ? VOICE_GENDER_MAP[newVoice] : undefined;
+                  updateManifest({
+                    voice_id: newVoice,
+                    ...(inferred ? { presenter_gender: inferred } : {}),
+                  });
+                }}
                 className="input"
               >
-                <option value="">— voz default de la personalidad —</option>
+                <option value="">— sin asignar —</option>
                 {CARTESIA_VOICES_ES.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name}
@@ -316,6 +347,20 @@ export default function EditarPlaticaPage() {
               </select>
             </Field>
           </div>
+
+          <Field
+            label="Personalidad del presentador"
+            required
+            help="Texto que se inyecta como system prompt del agente. Define cómo habla, qué reglas sigue y su tono."
+          >
+            <textarea
+              value={manifest.presenter_persona ?? ''}
+              onChange={(e) => updateManifest({ presenter_persona: e.target.value })}
+              required
+              rows={10}
+              className="input text-sm"
+            />
+          </Field>
 
           <Field
             label="Modelo de IA (OpenRouter, opcional)"

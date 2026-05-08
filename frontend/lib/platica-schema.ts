@@ -17,22 +17,52 @@ export type AdvanceMode = 'auto' | 'on_cue' | 'hybrid';
 
 export const ADVANCE_MODES: AdvanceMode[] = ['auto', 'on_cue', 'hybrid'];
 
+export type PresenterGender = 'hombre' | 'mujer';
+export const PRESENTER_GENDERS: PresenterGender[] = ['hombre', 'mujer'];
+
 export interface PlaticaManifest {
   id: string;
   title: string;
+  // Legacy: las primeras pláticas se creaban escogiendo una "personality_key"
+  // de un dropdown fijo (tato/ia_honesta/etc.). El campo persiste en JSON para
+  // que pláticas viejas sigan cargando, pero en pláticas nuevas guardamos
+  // 'custom' y el contenido real vive en presenter_* — el agent usa esos.
   personality_key: string;
+  presenter_name?: string;
+  presenter_gender?: PresenterGender;
+  presenter_persona?: string; // system prompt en texto libre; si está, sustituye al personality_key del agent
   owner_user_id: string;
   created_at: string;
   slide_count: number;
   audience_profile: string;
   narrative_tone: string;
   advance_mode?: AdvanceMode; // default 'hybrid'
-  voice_id?: string; // overrides personality default if present
+  voice_id?: string;
   model?: string; // OpenRouter model ID; overrides personality model if present
   glossary?: Record<string, string>;
   story_arcs?: StoryArc[];
   key_moments?: number[];
 }
+
+// Default usado para prealimentar el formulario de creación / edición. Mantén
+// sincronizado con la entrada "tato" en agent/personalities.py.
+export const DEFAULT_PRESENTER = {
+  name: 'Tato',
+  gender: 'hombre' as PresenterGender,
+  voice_id: '3a35daa1-ba81-451c-9b21-59332e9db2f3', // Alejandro - Mentor Calmado
+  persona: [
+    'Eres Tato, un presentador cálido que da pláticas de divulgación. ',
+    'Tu fuerte es explicar cosas con paciencia y analogías sencillas, sin tecnicismos. ',
+    'Cuando uses una palabra técnica, la explicas con palabras del día a día.\n\n',
+    'Reglas de comunicación:\n',
+    "- Responde siempre en español mexicano, con un trato cálido y respetuoso. Puedes tutear o usar 'usted' según sienta natural con la audiencia.\n",
+    '- Usa analogías cotidianas: la cocina, el jardín, la receta de la abuela, el radio, la libreta de apuntes, herramientas comunes.\n',
+    "- Nunca digas 'como modelo de lenguaje' ni te describas en términos técnicos. Habla de ti como un ayudante.\n",
+    "- Si te preguntan algo que no sabes, dilo con honestidad: 'no lo sé' o 'no estoy seguro'. No inventes.\n",
+    '- No des consejos médicos, legales ni financieros específicos. Sugiere consultar a una persona de confianza.\n\n',
+    'Tu tono: amigable, paciente, sin prisa. Trata a cada persona como un vecino querido.',
+  ].join(''),
+} as const;
 
 export interface GuionMedia {
   type: 'youtube' | 'audio';
@@ -77,16 +107,31 @@ export function validateManifestPayload(raw: unknown):
   if (!raw || typeof raw !== 'object')
     return { ok: false, error: 'manifest debe ser un objeto JSON' };
   const m = raw as Record<string, unknown>;
-  const requiredStrings = [
-    'title',
-    'personality_key',
-    'audience_profile',
-    'narrative_tone',
-  ] as const;
+  const requiredStrings = ['title', 'audience_profile', 'narrative_tone'] as const;
   for (const k of requiredStrings) {
     if (typeof m[k] !== 'string' || !(m[k] as string).trim()) {
       return { ok: false, error: `campo requerido faltante o vacío: ${k}` };
     }
+  }
+  // personality_key es opcional — si no llega, defaulteamos a 'custom' (las
+  // pláticas nuevas usan presenter_persona; el campo solo persiste para back-compat).
+  if (m.personality_key !== undefined && typeof m.personality_key !== 'string') {
+    return { ok: false, error: 'personality_key debe ser una cadena' };
+  }
+  if (m.presenter_name !== undefined && typeof m.presenter_name !== 'string') {
+    return { ok: false, error: 'presenter_name debe ser una cadena' };
+  }
+  if (
+    m.presenter_gender !== undefined &&
+    !PRESENTER_GENDERS.includes(m.presenter_gender as PresenterGender)
+  ) {
+    return {
+      ok: false,
+      error: `presenter_gender debe ser uno de: ${PRESENTER_GENDERS.join(', ')}`,
+    };
+  }
+  if (m.presenter_persona !== undefined && typeof m.presenter_persona !== 'string') {
+    return { ok: false, error: 'presenter_persona debe ser una cadena' };
   }
   if (m.glossary !== undefined && (typeof m.glossary !== 'object' || Array.isArray(m.glossary))) {
     return { ok: false, error: 'glossary debe ser un objeto { término: explicación }' };
@@ -113,7 +158,10 @@ export function validateManifestPayload(raw: unknown):
     ok: true,
     value: {
       title: (m.title as string).trim(),
-      personality_key: (m.personality_key as string).trim(),
+      personality_key: ((m.personality_key as string | undefined) ?? 'custom').trim() || 'custom',
+      presenter_name: (m.presenter_name as string | undefined)?.trim() || undefined,
+      presenter_gender: (m.presenter_gender as PresenterGender | undefined) ?? undefined,
+      presenter_persona: (m.presenter_persona as string | undefined)?.trim() || undefined,
       audience_profile: (m.audience_profile as string).trim(),
       narrative_tone: (m.narrative_tone as string).trim(),
       advance_mode: (m.advance_mode as AdvanceMode | undefined) ?? 'hybrid',
