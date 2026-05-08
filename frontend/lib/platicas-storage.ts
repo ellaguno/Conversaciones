@@ -9,7 +9,15 @@
 // and is enforced by the API routes. The id is a nanoid; paths are sanitized
 // before resolution to keep callers from escaping the platicas root.
 import { execFile } from 'child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { join, resolve } from 'path';
 import { promisify } from 'util';
 import type { PlaticaGuion, PlaticaListItem, PlaticaManifest } from './platica-schema';
@@ -231,4 +239,107 @@ export async function renderPdfToPngs(platicaId: string, pdfPath: string): Promi
     count++;
   }
   return count;
+}
+
+// ─── Reorganización estructural de slides ──────────────────────────────────
+// Las siguientes funciones renombran archivos en /slides/ atómicamente para
+// soportar insertar / borrar / reordenar slides desde el editor. Se usan
+// renombrados a nombres temporales en dos pasos para evitar clobbering cuando
+// la nueva posición colisiona con un nombre existente (ej. 002 ↔ 003 en swap).
+
+function slidesDir(platicaId: string): string {
+  return join(getPlaticaDir(platicaId), 'slides');
+}
+
+function paddedName(n: number, ext: SlideExtension): string {
+  return `${String(n).padStart(3, '0')}.${ext}`;
+}
+
+// Mueve la imagen del slide `from` al slot `to`. Si `to` ya existe, debe estar
+// vacío antes de llamar (o usar tmpName / two-pass). No verifica colisiones.
+function renameSlideFile(platicaId: string, from: number, to: number): void {
+  const found = findSlidePath(platicaId, from);
+  if (!found) return;
+  const dir = slidesDir(platicaId);
+  const dst = join(dir, paddedName(to, found.ext));
+  renameSync(found.path, dst);
+}
+
+// Sube todos los slides desde `fromSlide` (inclusive) hasta `lastSlide` en una
+// posición. Recorre en orden descendente para no clobbering. Usado por insert.
+function shiftSlidesUp(platicaId: string, fromSlide: number, lastSlide: number): void {
+  for (let s = lastSlide; s >= fromSlide; s--) {
+    renameSlideFile(platicaId, s, s + 1);
+  }
+}
+
+// Baja todos los slides desde `fromSlide` (inclusive) hasta `lastSlide` una
+// posición. Recorre en orden ascendente. Usado por delete.
+function shiftSlidesDown(platicaId: string, fromSlide: number, lastSlide: number): void {
+  for (let s = fromSlide; s <= lastSlide; s++) {
+    renameSlideFile(platicaId, s, s - 1);
+  }
+}
+
+// Aplica una permutación arbitraria a los slides en disco. `order[i]` = el
+// número de slide ORIGINAL que debe quedar en la posición (i+1) después de la
+// reorganización. Implementado como rename a nombres temporales (.tmp_NNN) y
+// luego rename a los nombres finales — evita clobbering en cualquier permutación.
+export function reorderSlideFiles(platicaId: string, order: number[]): void {
+  const dir = slidesDir(platicaId);
+  if (!existsSync(dir)) return;
+  // Snapshot: capturar (path original, ext) para cada slide ANTES de tocar disco.
+  const snapshot = new Map<number, { path: string; ext: SlideExtension }>();
+  for (let s = 1; s <= order.length; s++) {
+    const found = findSlidePath(platicaId, s);
+    if (found) snapshot.set(s, found);
+  }
+  // Pase 1: mover cada original a un nombre temporal único basado en su número.
+  for (const [origNum, info] of snapshot) {
+    const tmp = join(dir, `__reorder_${origNum}.${info.ext}`);
+    renameSync(info.path, tmp);
+    info.path = tmp;
+  }
+  // Pase 2: mover cada temporal a su destino final.
+  for (let i = 0; i < order.length; i++) {
+    const newSlide = i + 1;
+    const oldSlide = order[i];
+    const info = snapshot.get(oldSlide);
+    if (!info) continue;
+    const dst = join(dir, paddedName(newSlide, info.ext));
+    renameSync(info.path, dst);
+  }
+}
+
+// Inserta una imagen en `position` (1..oldCount+1). Sube todo lo que estaba en
+// position..oldCount una posición y escribe la nueva imagen como `position`.
+export function insertSlideAt(
+  platicaId: string,
+  position: number,
+  buffer: Buffer,
+  ext: SlideExtension,
+  oldCount: number
+): void {
+  const dir = slidesDir(platicaId);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (position < 1 || position > oldCount + 1) {
+    throw new Error(`position fuera de rango: ${position} (1..${oldCount + 1})`);
+  }
+  if (position <= oldCount) {
+    shiftSlidesUp(platicaId, position, oldCount);
+  }
+  writeFileSync(join(dir, paddedName(position, ext)), buffer);
+}
+
+// Borra el slide en `position` y baja una posición a todos los slides
+// posteriores. Asume oldCount es el conteo ANTES del borrado.
+export function deleteSlideAt(platicaId: string, position: number, oldCount: number): void {
+  if (position < 1 || position > oldCount) {
+    throw new Error(`position fuera de rango: ${position} (1..${oldCount})`);
+  }
+  const found = findSlidePath(platicaId, position);
+  if (found) rmSync(found.path);
+  if (position < oldCount) {
+    shiftSlidesDown(platicaId, position + 1, oldCount);
+  }
 }

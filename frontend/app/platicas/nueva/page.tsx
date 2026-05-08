@@ -16,7 +16,25 @@ import {
   type GuionBlock,
   type PlaticaGuion,
   type PresenterGender,
+  type SlideTransition,
 } from '@/lib/platica-schema';
+
+const TRANSITION_OPTIONS: { value: SlideTransition; label: string; help: string }[] = [
+  { value: 'none', label: 'Sin efecto', help: 'Corte directo, instantáneo.' },
+  { value: 'fade', label: 'Fade (recomendado)', help: 'Disolvencia suave entre slides.' },
+  {
+    value: 'slide_left',
+    label: 'Deslizar a la izquierda',
+    help: 'El nuevo slide entra por la derecha.',
+  },
+  {
+    value: 'slide_right',
+    label: 'Deslizar a la derecha',
+    help: 'El nuevo slide entra por la izquierda.',
+  },
+  { value: 'slide_up', label: 'Deslizar hacia arriba', help: 'El nuevo slide sube desde abajo.' },
+  { value: 'zoom', label: 'Zoom', help: 'El nuevo slide aparece haciendo zoom in.' },
+];
 
 type GuionMode = 'doc' | 'auto' | 'json';
 
@@ -87,6 +105,7 @@ export default function NuevaPlaticaPage() {
   const [voiceId, setVoiceId] = useState<string>(DEFAULT_PRESENTER.voice_id);
   const [model, setModel] = useState('');
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('hybrid');
+  const [slideTransition, setSlideTransition] = useState<SlideTransition>('fade');
   const [audience, setAudience] = useState('');
   const [tone, setTone] = useState('');
   const [glossaryText, setGlossaryText] = useState('');
@@ -228,6 +247,7 @@ export default function NuevaPlaticaPage() {
       audience_profile: audience.trim(),
       narrative_tone: tone.trim(),
       advance_mode: advanceMode,
+      slide_transition: slideTransition,
       ...(voiceId && { voice_id: voiceId }),
       ...(model.trim() && { model: model.trim() }),
       ...(glossary && { glossary }),
@@ -349,6 +369,23 @@ export default function NuevaPlaticaPage() {
               placeholder="ej. google/gemini-2.0-flash-001, deepseek/deepseek-v3.2-exp, anthropic/claude-haiku-4.5"
               className="input font-mono text-xs"
             />
+          </Field>
+
+          <Field
+            label="Efecto de transición entre slides"
+            help="Se aplica a TODOS los cambios de slide en la vista de proyección."
+          >
+            <select
+              value={slideTransition}
+              onChange={(e) => setSlideTransition(e.target.value as SlideTransition)}
+              className="input"
+            >
+              {TRANSITION_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label} — {t.help}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Modo de avance" required>

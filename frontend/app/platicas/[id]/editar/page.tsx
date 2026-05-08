@@ -16,7 +16,25 @@ import {
   type PlaticaGuion,
   type PlaticaManifest,
   type PresenterGender,
+  type SlideTransition,
 } from '@/lib/platica-schema';
+
+const TRANSITION_OPTIONS: { value: SlideTransition; label: string; help: string }[] = [
+  { value: 'none', label: 'Sin efecto', help: 'Corte directo, instantáneo.' },
+  { value: 'fade', label: 'Fade (recomendado)', help: 'Disolvencia suave entre slides.' },
+  {
+    value: 'slide_left',
+    label: 'Deslizar a la izquierda',
+    help: 'El nuevo slide entra por la derecha.',
+  },
+  {
+    value: 'slide_right',
+    label: 'Deslizar a la derecha',
+    help: 'El nuevo slide entra por la izquierda.',
+  },
+  { value: 'slide_up', label: 'Deslizar hacia arriba', help: 'El nuevo slide sube desde abajo.' },
+  { value: 'zoom', label: 'Zoom', help: 'El nuevo slide aparece haciendo zoom in.' },
+];
 
 // Cartesia voice id → 'hombre' | 'mujer' (derivado del campo gender de
 // CARTESIA_VOICES_ES) para autollenar el campo Género al elegir voz.
@@ -100,6 +118,175 @@ export default function EditarPlaticaPage() {
 
   const bumpSlideVersion = (slide: number) => {
     setSlideVersions((prev) => ({ ...prev, [slide]: (prev[slide] ?? 0) + 1 }));
+  };
+
+  // Las operaciones estructurales (mover/borrar/insertar) tocan disco y
+  // renumeran slides. Si hay edits pendientes en memoria, hay que persistirlos
+  // antes para que el endpoint estructural no los pise. Esta función arma el
+  // mismo payload que `submit` y lo envía silenciosamente.
+  const persistCurrentEdits = async (): Promise<boolean> => {
+    if (!manifest || !blocks) return false;
+    let glossary: Record<string, string> | undefined;
+    if (glossaryText.trim()) {
+      try {
+        const parsed = JSON.parse(glossaryText);
+        if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setError('El glosario debe ser un objeto JSON.');
+          return false;
+        }
+        glossary = parsed;
+      } catch {
+        setError('El glosario no es JSON válido.');
+        return false;
+      }
+    }
+    let acc = 0;
+    const cleanedBlocks = blocks.map((b) => {
+      const out = { ...b, start_sec: acc };
+      acc += Math.max(0, Number(b.duration_sec) || 0);
+      return out;
+    });
+    const manifestPatch = {
+      title: manifest.title,
+      personality_key: manifest.personality_key,
+      presenter_name: manifest.presenter_name?.trim() || undefined,
+      presenter_gender: manifest.presenter_gender,
+      presenter_persona: manifest.presenter_persona?.trim() || undefined,
+      audience_profile: manifest.audience_profile,
+      narrative_tone: manifest.narrative_tone,
+      advance_mode: manifest.advance_mode,
+      slide_transition: manifest.slide_transition,
+      voice_id: manifest.voice_id || undefined,
+      model: manifest.model || undefined,
+      glossary,
+      story_arcs: manifest.story_arcs,
+      key_moments: manifest.key_moments,
+    };
+    try {
+      const r = await fetch(`/api/platicas/${id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manifest: manifestPatch, guion: { blocks: cleanedBlocks } }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setError(body.error ?? `HTTP ${r.status}`);
+        return false;
+      }
+      return true;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
+    }
+  };
+
+  const refreshSlideVersions = (count: number) => {
+    const fresh: Record<number, number> = {};
+    const t = Date.now();
+    for (let s = 1; s <= count; s++) fresh[s] = t;
+    setSlideVersions(fresh);
+  };
+
+  const [structureBusy, setStructureBusy] = useState(false);
+
+  // Mover bloque idx una posición arriba (-1) o abajo (+1). Persiste edits
+  // pendientes, envía la permutación al backend, y reemplaza el estado local.
+  const handleMove = async (idx: number, direction: -1 | 1) => {
+    if (!blocks) return;
+    const j = idx + direction;
+    if (j < 0 || j >= blocks.length) return;
+    setError(null);
+    setStructureBusy(true);
+    try {
+      const ok = await persistCurrentEdits();
+      if (!ok) return;
+      const order = blocks.map((b) => b.slide);
+      [order[idx], order[j]] = [order[j], order[idx]];
+      const r = await fetch(`/api/platicas/${id}/order`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      const m = body.manifest as PlaticaManifest;
+      setManifest((prev) => (prev ? { ...prev, ...m } : m));
+      setBlocks((body.guion as PlaticaGuion).blocks);
+      refreshSlideVersions(m.slide_count);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStructureBusy(false);
+    }
+  };
+
+  // Borrar slide. Confirma con el usuario antes — la imagen se pierde.
+  const handleDelete = async (idx: number) => {
+    if (!blocks) return;
+    const block = blocks[idx];
+    if (!block) return;
+    if (blocks.length <= 1) {
+      setError('No puedes borrar el último slide.');
+      return;
+    }
+    if (
+      !confirm(
+        `¿Borrar el slide ${block.slide}? La imagen se elimina y los slides posteriores se renumeran. Esta acción no se puede deshacer (a menos que vuelvas a subir el PDF original).`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setStructureBusy(true);
+    try {
+      const ok = await persistCurrentEdits();
+      if (!ok) return;
+      const r = await fetch(`/api/platicas/${id}/slides/${block.slide}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      const m = body.manifest as PlaticaManifest;
+      setManifest((prev) => (prev ? { ...prev, ...m } : m));
+      setBlocks((body.guion as PlaticaGuion).blocks);
+      refreshSlideVersions(m.slide_count);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStructureBusy(false);
+    }
+  };
+
+  // Insertar slide en `position` (1..slide_count+1) con la imagen subida.
+  const handleInsert = async (position: number, file: File) => {
+    if (!manifest) return;
+    setError(null);
+    setStructureBusy(true);
+    try {
+      const ok = await persistCurrentEdits();
+      if (!ok) return;
+      const fd = new FormData();
+      fd.append('position', String(position));
+      fd.append('image', file);
+      const r = await fetch(`/api/platicas/${id}/slides`, {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      const m = body.manifest as PlaticaManifest;
+      setManifest((prev) => (prev ? { ...prev, ...m } : m));
+      setBlocks((body.guion as PlaticaGuion).blocks);
+      refreshSlideVersions(m.slide_count);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStructureBusy(false);
+    }
   };
 
   // Handler para subir un PDF de reemplazo. Confirma con el usuario si el
@@ -191,6 +378,7 @@ export default function EditarPlaticaPage() {
       audience_profile: manifest.audience_profile,
       narrative_tone: manifest.narrative_tone,
       advance_mode: manifest.advance_mode,
+      slide_transition: manifest.slide_transition,
       voice_id: manifest.voice_id || undefined,
       model: manifest.model || undefined,
       glossary,
@@ -375,6 +563,25 @@ export default function EditarPlaticaPage() {
             />
           </Field>
 
+          <Field
+            label="Efecto de transición entre slides"
+            help="Se aplica a TODOS los cambios de slide en la vista de proyección. (Por slide se podrá configurar después.)"
+          >
+            <select
+              value={manifest.slide_transition ?? 'fade'}
+              onChange={(e) =>
+                updateManifest({ slide_transition: e.target.value as SlideTransition })
+              }
+              className="input"
+            >
+              {TRANSITION_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label} — {t.help}
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <Field label="Modo de avance" required>
             <div className="space-y-2">
               {(['hybrid', 'on_cue', 'auto'] as AdvanceMode[]).map((m) => {
@@ -440,17 +647,34 @@ export default function EditarPlaticaPage() {
 
           <div className="border-border rounded-xl border p-4">
             <div className="mb-3 text-sm font-semibold">Bloques del guion ({blocks.length})</div>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {blocks.map((b, i) => (
-                <BlockEditor
-                  key={i}
-                  block={b}
-                  onChange={(patch) => updateBlock(i, patch)}
-                  platicaId={id}
-                  slideVersion={slideVersions[b.slide] ?? 0}
-                  onSlideReplaced={() => bumpSlideVersion(b.slide)}
-                />
+                <div key={`block-${i}`}>
+                  <InsertSlideButton
+                    position={i + 1}
+                    disabled={structureBusy}
+                    onInsert={handleInsert}
+                  />
+                  <BlockEditor
+                    block={b}
+                    index={i}
+                    total={blocks.length}
+                    busy={structureBusy}
+                    onChange={(patch) => updateBlock(i, patch)}
+                    onMove={(dir) => handleMove(i, dir)}
+                    onToggleHidden={() => updateBlock(i, { hidden: !b.hidden })}
+                    onDelete={() => handleDelete(i)}
+                    platicaId={id}
+                    slideVersion={slideVersions[b.slide] ?? 0}
+                    onSlideReplaced={() => bumpSlideVersion(b.slide)}
+                  />
+                </div>
               ))}
+              <InsertSlideButton
+                position={blocks.length + 1}
+                disabled={structureBusy}
+                onInsert={handleInsert}
+              />
             </div>
           </div>
 
@@ -522,13 +746,25 @@ function Field({
 
 function BlockEditor({
   block,
+  index,
+  total,
+  busy,
   onChange,
+  onMove,
+  onToggleHidden,
+  onDelete,
   platicaId,
   slideVersion,
   onSlideReplaced,
 }: {
   block: GuionBlock;
+  index: number;
+  total: number;
+  busy: boolean;
   onChange: (patch: Partial<GuionBlock>) => void;
+  onMove: (direction: -1 | 1) => void;
+  onToggleHidden: () => void;
+  onDelete: () => void;
   platicaId: string;
   slideVersion: number;
   onSlideReplaced: () => void;
@@ -567,23 +803,80 @@ function BlockEditor({
     }
   };
 
+  const isFirst = index === 0;
+  const isLast = index === total - 1;
+  const hidden = block.hidden === true;
+
   return (
-    <div className="border-border bg-card rounded-lg border p-3">
+    <div
+      className={`border-border bg-card rounded-lg border p-3 ${
+        hidden ? 'opacity-60' : ''
+      } ${busy ? 'pointer-events-none' : ''}`}
+    >
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">Slide {block.slide}</div>
-            <label className="text-muted-foreground flex items-center gap-2 text-xs">
-              duración (seg)
-              <input
-                type="number"
-                min={10}
-                max={600}
-                value={block.duration_sec}
-                onChange={(e) => onChange({ duration_sec: parseInt(e.target.value, 10) || 60 })}
-                className="input w-20 px-2 py-1 text-xs"
-              />
-            </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold">Slide {block.slide}</div>
+              {hidden && (
+                <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-amber-700 uppercase dark:text-amber-300">
+                  Oculto
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onMove(-1)}
+                disabled={isFirst || busy}
+                title="Mover arriba"
+                aria-label="Mover arriba"
+                className="border-border hover:bg-accent rounded border px-2 py-1 text-xs disabled:opacity-30"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => onMove(1)}
+                disabled={isLast || busy}
+                title="Mover abajo"
+                aria-label="Mover abajo"
+                className="border-border hover:bg-accent rounded border px-2 py-1 text-xs disabled:opacity-30"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                onClick={onToggleHidden}
+                disabled={busy}
+                title={hidden ? 'Mostrar slide' : 'Ocultar slide (saltar en presentación)'}
+                aria-label={hidden ? 'Mostrar slide' : 'Ocultar slide'}
+                className="border-border hover:bg-accent rounded border px-2 py-1 text-xs disabled:opacity-30"
+              >
+                {hidden ? '👁' : '🚫'}
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={busy}
+                title="Borrar slide"
+                aria-label="Borrar slide"
+                className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-600 hover:bg-red-500/10 disabled:opacity-30 dark:text-red-400"
+              >
+                🗑
+              </button>
+              <label className="text-muted-foreground ml-2 flex items-center gap-2 text-xs">
+                seg
+                <input
+                  type="number"
+                  min={10}
+                  max={600}
+                  value={block.duration_sec}
+                  onChange={(e) => onChange({ duration_sec: parseInt(e.target.value, 10) || 60 })}
+                  className="input w-16 px-2 py-1 text-xs"
+                />
+              </label>
+            </div>
           </div>
           <input
             type="text"
@@ -657,6 +950,46 @@ function BlockEditor({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Insertar slide nuevo en una posición específica del guion. Aparece como una
+// línea fina entre cada par de bloques (y al final). Al darle click, abre el
+// selector de archivos; al elegir imagen, llama al endpoint de inserción.
+function InsertSlideButton({
+  position,
+  disabled,
+  onInsert,
+}: {
+  position: number;
+  disabled: boolean;
+  onInsert: (position: number, file: File) => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  return (
+    <div className="group flex justify-center py-1">
+      <input
+        ref={ref}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) {
+            onInsert(position, f);
+            if (ref.current) ref.current.value = '';
+          }
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => ref.current?.click()}
+        disabled={disabled}
+        className="text-muted-foreground hover:bg-accent hover:text-foreground flex items-center gap-2 rounded-full px-3 py-0.5 text-xs opacity-40 transition-opacity group-hover:opacity-100 hover:opacity-100 disabled:opacity-20"
+      >
+        + Insertar slide en posición {position}
+      </button>
     </div>
   );
 }

@@ -428,13 +428,14 @@ async def entrypoint(ctx: JobContext):
         # Plática mode: stop the watchdog loop and clean up the live state file
         # so the next session starts fresh and the process can exit cleanly.
         if pres_state is not None:
-            wd = getattr(pres_state, "_watchdog_task", None)
-            if wd is not None and not wd.done():
-                wd.cancel()
-                try:
-                    await wd
-                except (asyncio.CancelledError, Exception):
-                    pass
+            for task_attr in ("_watchdog_task", "_pacing_task"):
+                t = getattr(pres_state, task_attr, None)
+                if t is not None and not t.done():
+                    t.cancel()
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
             try:
                 if pres_state.state_file.exists():
                     pres_state.state_file.unlink()
@@ -588,6 +589,47 @@ async def entrypoint(ctx: JobContext):
         # Without this, the infinite-loop task keeps the process alive past
         # session end, triggering the "process did not exit in time" kill.
         pres_state._watchdog_task = watchdog_task
+
+    # Plática pacing nudge: cuando el LLM rebasa el `duration_sec` del slide
+    # actual, refrescamos las instrucciones para que el bloque DETALLE incluya
+    # el contador "transcurrido" y el aviso de tiempo excedido. El refresh
+    # llega al LLM en su siguiente turno y lo empuja a cerrar y avanzar. Corre
+    # en TODOS los modos (auto/hybrid/on_cue) — en on_cue el LLM no avanza
+    # solo, pero el aviso lo ayuda a no abrir nuevos sub-temas.
+    if pres_state is not None:
+
+        async def _pacing_nudge():
+            try:
+                while True:
+                    # Tick rítmico — el costo es una llamada update_instructions
+                    # cada ~10s mientras estés cerca/pasado del objetivo. Cuando
+                    # el slide es nuevo o aún no se acerca, no se refresca.
+                    await asyncio.sleep(10.0)
+                    cur = pres_state.current_slide
+                    block = next(
+                        (b for b in pres_state.platica.guion if b.slide == cur), None
+                    )
+                    if block is None or not block.duration_sec:
+                        continue
+                    elapsed = time.monotonic() - pres_state.slide_entered_at
+                    # Solo refrescamos si ya estamos en zona de aviso. Antes del
+                    # 85% el bloque detalle no cambia, así que update sería
+                    # ruido.
+                    if elapsed > block.duration_sec * 0.85:
+                        try:
+                            await pres_state.refresh_instructions()
+                            logger.info(
+                                f"Pacing nudge: slide={cur}, elapsed={int(elapsed)}s, "
+                                f"target={block.duration_sec}s"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Pacing nudge refresh fallo: {e}")
+            except asyncio.CancelledError:
+                pass
+
+        pacing_task = asyncio.create_task(_pacing_nudge())
+        pres_state._pacing_task = pacing_task
+        logger.info("Pacing nudge activo (tick=10s, umbral=85% del duration_sec)")
 
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):

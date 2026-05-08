@@ -207,6 +207,7 @@ function SessionInner({
           initialPatientId={initialPatientId}
           isGuest={isGuest}
           adminLayoutDefaults={adminLayoutDefaults}
+          platicaId={platicaId}
         />
       </main>
       <StartAudioButton label="Start Audio" />

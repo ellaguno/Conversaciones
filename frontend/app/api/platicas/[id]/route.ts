@@ -74,9 +74,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const merged = {
       title: m.title ?? existing.title,
       personality_key: m.personality_key ?? existing.personality_key,
+      presenter_name: m.presenter_name !== undefined ? m.presenter_name : existing.presenter_name,
+      presenter_gender:
+        m.presenter_gender !== undefined ? m.presenter_gender : existing.presenter_gender,
+      presenter_persona:
+        m.presenter_persona !== undefined ? m.presenter_persona : existing.presenter_persona,
       audience_profile: m.audience_profile ?? existing.audience_profile,
       narrative_tone: m.narrative_tone ?? existing.narrative_tone,
       advance_mode: m.advance_mode ?? existing.advance_mode,
+      slide_transition:
+        m.slide_transition !== undefined ? m.slide_transition : existing.slide_transition,
       voice_id: m.voice_id !== undefined ? m.voice_id : existing.voice_id,
       model: m.model !== undefined ? m.model : existing.model,
       glossary: m.glossary !== undefined ? m.glossary : existing.glossary,

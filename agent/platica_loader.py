@@ -35,6 +35,7 @@ class GuionBlock:
     speaker_notes: str
     talking_points: list[str] = field(default_factory=list)
     allow_questions: bool = True
+    hidden: bool = False
     media: dict | None = None
 
 
@@ -114,10 +115,19 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
                 speaker_notes=b.get("speaker_notes", ""),
                 talking_points=list(b.get("talking_points", []) or []),
                 allow_questions=bool(b.get("allow_questions", True)),
+                hidden=bool(b.get("hidden", False)),
                 media=b.get("media"),
             )
             for b in g.get("blocks", [])
         ]
+        # Filtra los slides ocultos: el agent jamás los narra, no aparecen en
+        # el índice ni en el detalle. Quedan en disco pero invisibles para la
+        # presentación. Si todos están ocultos, regresa None — la plática no
+        # tiene contenido narrable.
+        blocks = [b for b in blocks if not b.hidden]
+        if not blocks:
+            logger.error(f"Plática '{platica_id}': todos los bloques están ocultos")
+            return None
         blocks.sort(key=lambda b: b.slide)
         return Platica(manifest=manifest, guion=blocks)
     except (KeyError, ValueError, json.JSONDecodeError) as e:
@@ -229,9 +239,16 @@ def build_index_block(platica: Platica) -> str:
     return "\n".join(lines)
 
 
-def build_detail_block(platica: Platica, current_slide: int, window: int = 5) -> str:
+def build_detail_block(
+    platica: Platica,
+    current_slide: int,
+    window: int = 5,
+    elapsed_sec: float = 0.0,
+) -> str:
     """Full speaker_notes + talking_points for slides in [current-window, current+window].
-    Regenerated each time the slide changes."""
+    Regenerated each time the slide changes — y también periódicamente desde el
+    pacing-ticker en agent.py para que el LLM vea el `transcurrido` y los nudges
+    de tiempo cuando se acerca o pasa del objetivo de duración."""
     start = max(1, current_slide - window)
     end = min(platica.manifest.slide_count, current_slide + window)
     lines = [
@@ -240,9 +257,32 @@ def build_detail_block(platica: Platica, current_slide: int, window: int = 5) ->
     for block in platica.guion:
         if not (start <= block.slide <= end):
             continue
-        marker = "  ← SLIDE ACTUAL" if block.slide == current_slide else ""
+        is_current = block.slide == current_slide
+        marker = "  ← SLIDE ACTUAL" if is_current else ""
         lines.append("")
         lines.append(f"• Slide {block.slide}{marker}")
+        # Tiempo objetivo: para todos los slides se anota como guía suave.
+        # Para el slide actual incluimos el transcurrido y un nudge cuando
+        # te acercas (>90%) o te pasas (>140%) del objetivo.
+        if block.duration_sec:
+            if is_current:
+                elapsed = max(0, int(elapsed_sec))
+                target = block.duration_sec
+                if elapsed_sec > target * 1.4:
+                    status = (
+                        f"  ⚠ TIEMPO EXCEDIDO ({elapsed}s vs objetivo {target}s) — "
+                        "cierra esta idea con UNA frase y avanza al siguiente slide."
+                    )
+                elif elapsed_sec > target * 0.9:
+                    status = (
+                        f"  ⏱ Cerca del objetivo ({elapsed}s de {target}s) — "
+                        "prepara el cierre, no abras nuevos sub-temas."
+                    )
+                else:
+                    status = ""
+                lines.append(f"  Tiempo: objetivo ~{target}s, transcurrido {elapsed}s.{status}")
+            else:
+                lines.append(f"  Tiempo objetivo: ~{block.duration_sec}s")
         lines.append(f"  Resumen: {block.summary}")
         if block.speaker_notes:
             lines.append(f"  Notas: {block.speaker_notes}")
@@ -259,7 +299,11 @@ def build_detail_block(platica: Platica, current_slide: int, window: int = 5) ->
 
 
 def build_full_instructions(
-    base_personality_prompt: str, platica: Platica, current_slide: int, window: int = 5
+    base_personality_prompt: str,
+    platica: Platica,
+    current_slide: int,
+    window: int = 5,
+    elapsed_sec: float = 0.0,
 ) -> str:
     """Stitch personality system_prompt + base + índice + detalle. Used both
     at session start and on every slide change (only detalle differs)."""
@@ -270,5 +314,5 @@ def build_full_instructions(
         + "\n\n"
         + build_index_block(platica)
         + "\n\n"
-        + build_detail_block(platica, current_slide, window=window)
+        + build_detail_block(platica, current_slide, window=window, elapsed_sec=elapsed_sec)
     )

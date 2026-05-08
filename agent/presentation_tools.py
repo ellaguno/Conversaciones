@@ -72,11 +72,13 @@ class PresentationState:
         self.write_state_to_disk()
 
     def build_instructions(self) -> str:
+        elapsed = max(0.0, time.monotonic() - self.slide_entered_at)
         return build_full_instructions(
             self.base_personality_prompt,
             self.platica,
             self.current_slide,
             window=self.window,
+            elapsed_sec=elapsed,
         )
 
     async def publish(self, payload: dict) -> None:

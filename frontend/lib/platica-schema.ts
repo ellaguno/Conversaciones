@@ -20,6 +20,19 @@ export const ADVANCE_MODES: AdvanceMode[] = ['auto', 'on_cue', 'hybrid'];
 export type PresenterGender = 'hombre' | 'mujer';
 export const PRESENTER_GENDERS: PresenterGender[] = ['hombre', 'mujer'];
 
+// Efecto CSS aplicado a TODOS los cambios de slide en la vista de proyección.
+// Por ahora es global por plática (PowerPoint permite por slide; lo dejamos
+// como TODO para una iteración futura).
+export type SlideTransition = 'none' | 'fade' | 'slide_left' | 'slide_right' | 'slide_up' | 'zoom';
+export const SLIDE_TRANSITIONS: SlideTransition[] = [
+  'none',
+  'fade',
+  'slide_left',
+  'slide_right',
+  'slide_up',
+  'zoom',
+];
+
 export interface PlaticaManifest {
   id: string;
   title: string;
@@ -37,6 +50,7 @@ export interface PlaticaManifest {
   audience_profile: string;
   narrative_tone: string;
   advance_mode?: AdvanceMode; // default 'hybrid'
+  slide_transition?: SlideTransition; // default 'fade'
   voice_id?: string;
   model?: string; // OpenRouter model ID; overrides personality model if present
   glossary?: Record<string, string>;
@@ -81,6 +95,10 @@ export interface GuionBlock {
   speaker_notes: string;
   talking_points: string[];
   allow_questions?: boolean;
+  // Slide oculto: el bloque persiste en disco (PNG y guion) pero se salta en
+  // narración del agent y navegación de la vista de proyección. Útil para
+  // backups o slides "para si surge" que no quieres desechar.
+  hidden?: boolean;
   media?: GuionMedia;
 }
 
@@ -148,6 +166,15 @@ export function validateManifestPayload(raw: unknown):
       error: `advance_mode debe ser uno de: ${ADVANCE_MODES.join(', ')}`,
     };
   }
+  if (
+    m.slide_transition !== undefined &&
+    !SLIDE_TRANSITIONS.includes(m.slide_transition as SlideTransition)
+  ) {
+    return {
+      ok: false,
+      error: `slide_transition debe ser uno de: ${SLIDE_TRANSITIONS.join(', ')}`,
+    };
+  }
   if (m.voice_id !== undefined && typeof m.voice_id !== 'string') {
     return { ok: false, error: 'voice_id debe ser una cadena' };
   }
@@ -165,6 +192,7 @@ export function validateManifestPayload(raw: unknown):
       audience_profile: (m.audience_profile as string).trim(),
       narrative_tone: (m.narrative_tone as string).trim(),
       advance_mode: (m.advance_mode as AdvanceMode | undefined) ?? 'hybrid',
+      slide_transition: (m.slide_transition as SlideTransition | undefined) ?? 'fade',
       voice_id: (m.voice_id as string | undefined)?.trim() || undefined,
       model: (m.model as string | undefined)?.trim() || undefined,
       glossary: (m.glossary as Record<string, string> | undefined) ?? undefined,
@@ -204,6 +232,7 @@ export function validateGuionPayload(
       speaker_notes: bo.speaker_notes as string,
       talking_points: Array.isArray(bo.talking_points) ? (bo.talking_points as string[]) : [],
       allow_questions: bo.allow_questions !== false,
+      hidden: bo.hidden === true ? true : undefined,
       media: (bo.media as GuionMedia | undefined) ?? undefined,
     });
   }

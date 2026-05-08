@@ -219,6 +219,10 @@ interface ViewControllerProps {
   initialPatientId?: string;
   isGuest?: boolean;
   adminLayoutDefaults?: Record<string, number> | null;
+  // Cuando hay platicaId activo, mostramos en el header el nombre del
+  // presentador y el título de la plática en lugar del nombre genérico de la
+  // personalidad. Se obtienen del manifest vía /api/platicas/:id.
+  platicaId?: string;
 }
 
 export function ViewController({
@@ -237,6 +241,7 @@ export function ViewController({
   initialPatientId,
   isGuest,
   adminLayoutDefaults,
+  platicaId,
 }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
   const { resolvedTheme } = useTheme();
@@ -246,6 +251,28 @@ export function ViewController({
   const [showConversations, setShowConversations] = useState<string | null>(null);
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [showPostSession, setShowPostSession] = useState(false);
+  // Header overrides para modo plática: nombre del presentador + título.
+  const [platicaHeader, setPlaticaHeader] = useState<{ name?: string; title?: string }>({});
+  useEffect(() => {
+    if (!platicaId) {
+      setPlaticaHeader({});
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/platicas/${platicaId}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.manifest) return;
+        setPlaticaHeader({
+          name: data.manifest.presenter_name || undefined,
+          title: data.manifest.title || undefined,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [platicaId]);
 
   // Detect disconnection to reset autoConnect
   useEffect(() => {
@@ -345,6 +372,8 @@ export function ViewController({
           key="session-view"
           {...VIEW_MOTION_PROPS}
           personality={activePersonality}
+          displayName={platicaHeader.name}
+          displaySubtitle={platicaHeader.title}
           supportsChatInput={appConfig.supportsChatInput}
           supportsVideoInput={appConfig.supportsVideoInput}
           supportsScreenShare={

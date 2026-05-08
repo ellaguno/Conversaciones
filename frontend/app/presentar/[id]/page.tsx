@@ -7,7 +7,11 @@
 // por el agente Tato o por la vista de control.
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import type { PlaticaGuion, PlaticaManifest } from '@/lib/platica-schema';
+import type { PlaticaGuion, PlaticaManifest, SlideTransition } from '@/lib/platica-schema';
+
+// Duración global del cambio de slide. Mantenerlo igual para todos los efectos
+// para que el operador pueda comparar A/B sin recalcular timing.
+const TRANSITION_MS = 600;
 
 export default function PresentarPage() {
   const params = useParams<{ id: string }>();
@@ -16,7 +20,11 @@ export default function PresentarPage() {
   const [guion, setGuion] = useState<PlaticaGuion | null>(null);
   const [currentSlide, setCurrentSlide] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // Slide saliente durante la transición. Cuando es null, solo renderizamos el
+  // slide actual sin animar. Lo seteamos al cambiar de slide y lo limpiamos
+  // cuando termina la animación.
+  const [prevSlide, setPrevSlide] = useState<number | null>(null);
+  const prevSlideRef = useRef<number>(1);
 
   useEffect(() => {
     fetch(`/api/platicas/${id}`, { credentials: 'include' })
@@ -28,6 +36,10 @@ export default function PresentarPage() {
       .then((data) => {
         setManifest(data.manifest);
         setGuion(data.guion);
+        // Si el primer slide está oculto, salta al primer slide visible para
+        // que la proyección no arranque mostrando un slide marcado para saltar.
+        const firstVisible = (data.guion as PlaticaGuion).blocks.find((b) => !b.hidden);
+        if (firstVisible) setCurrentSlide(firstVisible.slide);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
@@ -76,30 +88,48 @@ export default function PresentarPage() {
 
   // Keyboard navigation — Phase 1 fallback, useful for testing without an
   // active agent session. Polling above takes precedence when an agent is live.
+  // Salta slides marcados como `hidden` para alinearse con lo que el agente
+  // narra (que también los filtra).
   useEffect(() => {
+    if (!manifest || !guion) return;
+    const visible = guion.blocks.filter((b) => !b.hidden).map((b) => b.slide);
+    if (visible.length === 0) return;
+    const nextVisible = (s: number, dir: 1 | -1) => {
+      const sorted = dir === 1 ? visible : [...visible].reverse();
+      for (const v of sorted) {
+        if ((dir === 1 && v > s) || (dir === -1 && v < s)) return v;
+      }
+      return s;
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (!manifest) return;
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        setCurrentSlide((s) => Math.min(manifest.slide_count, s + 1));
+        setCurrentSlide((s) => nextVisible(s, 1));
         e.preventDefault();
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        setCurrentSlide((s) => Math.max(1, s - 1));
+        setCurrentSlide((s) => nextVisible(s, -1));
         e.preventDefault();
       } else if (e.key === 'Home') {
-        setCurrentSlide(1);
+        setCurrentSlide(visible[0]);
         e.preventDefault();
       } else if (e.key === 'End') {
-        setCurrentSlide(manifest.slide_count);
+        setCurrentSlide(visible[visible.length - 1]);
         e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [manifest]);
+  }, [manifest, guion]);
 
-  // Reset image-loaded state when slide changes so the brief flicker is hidden.
+  // Cada vez que cambia currentSlide arrancamos una transición: se renderizan
+  // ambos <img> (saliente con clase "leaving" y entrante con "entering"), y al
+  // cabo de TRANSITION_MS soltamos el saliente.
   useEffect(() => {
-    setImgLoaded(false);
+    if (currentSlide === prevSlideRef.current) return;
+    const leaving = prevSlideRef.current;
+    prevSlideRef.current = currentSlide;
+    setPrevSlide(leaving);
+    const t = setTimeout(() => setPrevSlide(null), TRANSITION_MS);
+    return () => clearTimeout(t);
   }, [currentSlide]);
 
   if (error) {
@@ -119,21 +149,36 @@ export default function PresentarPage() {
 
   const block = guion.blocks.find((b) => b.slide === currentSlide);
   const hasMedia = block?.media != null;
+  const transition: SlideTransition = manifest.slide_transition ?? 'fade';
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
       {hasMedia ? (
         <MediaPlaceholder block={block!} />
       ) : (
-        <img
-          src={`/api/platicas/${id}/slides/${currentSlide}`}
-          alt={`Slide ${currentSlide}`}
-          className={`absolute inset-0 m-auto max-h-full max-w-full object-contain transition-opacity duration-150 ${
-            imgLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
-          onLoad={() => setImgLoaded(true)}
-          draggable={false}
-        />
+        <>
+          {prevSlide != null && transition !== 'none' && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`leave-${prevSlide}`}
+              src={`/api/platicas/${id}/slides/${prevSlide}`}
+              alt=""
+              aria-hidden
+              className={`absolute inset-0 m-auto max-h-full max-w-full object-contain transition-leave-${transition}`}
+              draggable={false}
+            />
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={`enter-${currentSlide}`}
+            src={`/api/platicas/${id}/slides/${currentSlide}`}
+            alt={`Slide ${currentSlide}`}
+            className={`absolute inset-0 m-auto max-h-full max-w-full object-contain ${
+              transition !== 'none' ? `transition-enter-${transition}` : ''
+            }`}
+            draggable={false}
+          />
+        </>
       )}
       {/* Subtle progress indicator at the bottom; doesn't reveal slide numbers in
           big numerals — only a thin bar so the audience doesn't focus on counting. */}
@@ -143,6 +188,136 @@ export default function PresentarPage() {
           style={{ width: `${(currentSlide / manifest.slide_count) * 100}%` }}
         />
       </div>
+      <style jsx global>{`
+        /* Animaciones de cambio de slide. Duración fija (TRANSITION_MS=600ms)
+           para que el operador pueda comparar efectos sin re-cronometrar. */
+        @keyframes platica-fade-in {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes platica-fade-out {
+          from {
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+        @keyframes platica-slide-left-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        @keyframes platica-slide-left-out {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+        }
+        @keyframes platica-slide-right-in {
+          from {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        @keyframes platica-slide-right-out {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+        }
+        @keyframes platica-slide-up-in {
+          from {
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        @keyframes platica-slide-up-out {
+          from {
+            transform: translateY(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+        }
+        @keyframes platica-zoom-in {
+          from {
+            transform: scale(0.85);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes platica-zoom-out {
+          from {
+            transform: scale(1);
+            opacity: 1;
+          }
+          to {
+            transform: scale(1.15);
+            opacity: 0;
+          }
+        }
+        .transition-enter-fade {
+          animation: platica-fade-in 600ms ease forwards;
+        }
+        .transition-leave-fade {
+          animation: platica-fade-out 600ms ease forwards;
+        }
+        .transition-enter-slide_left {
+          animation: platica-slide-left-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-leave-slide_left {
+          animation: platica-slide-left-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-enter-slide_right {
+          animation: platica-slide-right-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-leave-slide_right {
+          animation: platica-slide-right-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-enter-slide_up {
+          animation: platica-slide-up-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-leave-slide_up {
+          animation: platica-slide-up-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .transition-enter-zoom {
+          animation: platica-zoom-in 600ms ease-out forwards;
+        }
+        .transition-leave-zoom {
+          animation: platica-zoom-out 600ms ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }

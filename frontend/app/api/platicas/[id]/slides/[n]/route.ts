@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
+import { readFileSync, statSync } from 'fs';
 // Node 18 needs `File` imported explicitly from `node:buffer` (not yet a global).
 import { File } from 'node:buffer';
 import { auth } from '@/lib/auth';
 import {
   SLIDE_MIME_TYPES,
   type SlideExtension,
+  deleteSlideAt,
   findSlidePath,
+  readGuion,
   readManifest,
+  writeGuion,
+  writeManifest,
   writeSlideImage,
 } from '@/lib/platicas-storage';
 import { rateLimit } from '@/lib/rate-limit';
@@ -43,14 +47,23 @@ export async function GET(
   if (!found) {
     return NextResponse.json({ error: 'imagen no encontrada' }, { status: 404 });
   }
+  // ETag basado en mtime del archivo. Cuando re-subes PDF o reemplazas la
+  // imagen del slide, mtime cambia → ETag cambia → el navegador re-descarga.
+  // Cache-Control: no-cache permite uso de caché PERO obliga a revalidar con
+  // el server cada vez (304 si el ETag coincide, costo ≈ un round-trip vacío).
+  // Esto resuelve el bug de "vuelven las imágenes viejas al refrescar la página".
+  const stat = statSync(found.path);
+  const etag = `"${found.ext}-${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+  if (req.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers: { ETag: etag } });
+  }
   const buf = readFileSync(found.path);
   return new Response(buf, {
     status: 200,
     headers: {
       'Content-Type': SLIDE_MIME_TYPES[found.ext],
-      // no-store on replaced slides would break perf; the client appends a
-      // version query string after a replace to bypass cache.
-      'Cache-Control': 'private, max-age=3600',
+      'Cache-Control': 'private, no-cache',
+      ETag: etag,
     },
   });
 }
@@ -116,6 +129,75 @@ export async function PUT(
     );
   }
   return NextResponse.json({ ok: true, slide: slideNumber, ext });
+}
+
+// DELETE remueve un slide ENTERO: borra la imagen, baja una posición a todos
+// los slides posteriores en disco, descarta el bloque del guion y renumera los
+// bloques restantes. Reduce slide_count en 1.
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string; n: string }> }
+) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!rateLimit(`platicas-slide-delete:${ip}`, 30, 60_000)) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
+  }
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+  const { id, n } = await params;
+  const manifest = readManifest(id);
+  if (!manifest) {
+    return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
+  }
+  if (manifest.owner_user_id !== session.user.id) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+  }
+  const slideNumber = parseInt(n, 10);
+  if (!Number.isInteger(slideNumber) || slideNumber < 1 || slideNumber > manifest.slide_count) {
+    return NextResponse.json({ error: 'slide fuera de rango' }, { status: 404 });
+  }
+  if (manifest.slide_count <= 1) {
+    return NextResponse.json(
+      {
+        error: 'No puedes borrar el último slide. Borra la plática completa si es lo que quieres.',
+      },
+      { status: 400 }
+    );
+  }
+
+  const guion = readGuion(id);
+  if (!guion) {
+    return NextResponse.json({ error: 'guion faltante' }, { status: 500 });
+  }
+
+  try {
+    deleteSlideAt(id, slideNumber, manifest.slide_count);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'error borrando slide' },
+      { status: 500 }
+    );
+  }
+
+  // Renumera bloques: descarta el del slide borrado, decrementa los posteriores.
+  const newBlocks = guion.blocks
+    .filter((b) => b.slide !== slideNumber)
+    .map((b) => (b.slide > slideNumber ? { ...b, slide: b.slide - 1 } : b))
+    .sort((a, b) => a.slide - b.slide);
+  let acc = 0;
+  for (const b of newBlocks) {
+    b.start_sec = acc;
+    acc += Math.max(0, Number(b.duration_sec) || 0);
+  }
+  writeGuion(id, { blocks: newBlocks });
+  writeManifest(id, { ...manifest, slide_count: manifest.slide_count - 1 });
+
+  return NextResponse.json({
+    manifest: readManifest(id),
+    guion: readGuion(id),
+  });
 }
 
 function detectImageExtension(name: string, mime: string): SlideExtension | null {

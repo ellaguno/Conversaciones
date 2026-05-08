@@ -106,6 +106,16 @@ export interface AgentSessionView_01Props {
   /** Current personality key */
   personality?: string;
   /**
+   * Override the displayed name in the header. Used by Plática mode to show
+   * the configured presenter_name instead of the hard-coded personality name.
+   */
+  displayName?: string;
+  /**
+   * Override the displayed subtitle in the header. Used by Plática mode to
+   * show the plática's title instead of the hard-coded category subtitle.
+   */
+  displaySubtitle?: string;
+  /**
    * Message shown above the controls before the first chat message is sent.
    *
    * @default 'Agent is listening, ask it a question'
@@ -254,6 +264,8 @@ function useMetricsPoller(enabled: boolean) {
 
 export function AgentSessionView_01({
   personality,
+  displayName,
+  displaySubtitle,
   preConnectMessage = 'Escuchando...',
   supportsChatInput = true,
   supportsVideoInput = true,
@@ -309,9 +321,14 @@ export function AgentSessionView_01({
       <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center gap-2 px-4 pt-3">
         <div className="text-center">
           <h2 className="text-foreground text-base leading-tight font-bold drop-shadow-sm">
-            {DEFAULT_CONFIGS[personality ?? '']?.name ?? personality ?? 'Conversacion'}
+            {displayName ??
+              DEFAULT_CONFIGS[personality ?? '']?.name ??
+              personality ??
+              'Conversacion'}
           </h2>
-          <p className="text-muted-foreground text-xs">{getSubtitle(personality ?? '')}</p>
+          <p className="text-muted-foreground text-xs">
+            {displaySubtitle ?? getSubtitle(personality ?? '')}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {isAdmin && metrics && metrics.total_tokens > 0 && (
