@@ -14,10 +14,27 @@ import {
   type AdvanceMode,
   DEFAULT_PRESENTER,
   type GuionBlock,
+  type OverlayCorner,
   type PlaticaGuion,
   type PresenterGender,
+  type PresenterVisualizer,
   type SlideTransition,
 } from '@/lib/platica-schema';
+
+const OVERLAY_CORNER_OPTIONS: { value: OverlayCorner; label: string }[] = [
+  { value: 'top-right', label: 'Arriba derecha (default)' },
+  { value: 'top-left', label: 'Arriba izquierda' },
+  { value: 'bottom-right', label: 'Abajo derecha' },
+  { value: 'bottom-left', label: 'Abajo izquierda' },
+];
+
+const VISUALIZER_OPTIONS: { value: PresenterVisualizer; label: string }[] = [
+  { value: 'aura', label: 'Aura (default)' },
+  { value: 'wave', label: 'Onda' },
+  { value: 'bar', label: 'Barras' },
+  { value: 'grid', label: 'Cuadrícula' },
+  { value: 'radial', label: 'Radial' },
+];
 
 const TRANSITION_OPTIONS: { value: SlideTransition; label: string; help: string }[] = [
   { value: 'none', label: 'Sin efecto', help: 'Corte directo, instantáneo.' },
@@ -106,6 +123,8 @@ export default function NuevaPlaticaPage() {
   const [model, setModel] = useState('');
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('hybrid');
   const [slideTransition, setSlideTransition] = useState<SlideTransition>('fade');
+  const [overlayCorner, setOverlayCorner] = useState<OverlayCorner>('top-right');
+  const [presenterVisualizer, setPresenterVisualizer] = useState<PresenterVisualizer>('aura');
   const [audience, setAudience] = useState('');
   const [tone, setTone] = useState('');
   const [glossaryText, setGlossaryText] = useState('');
@@ -248,6 +267,8 @@ export default function NuevaPlaticaPage() {
       narrative_tone: tone.trim(),
       advance_mode: advanceMode,
       slide_transition: slideTransition,
+      presenter_overlay_corner: overlayCorner,
+      presenter_visualizer: presenterVisualizer,
       ...(voiceId && { voice_id: voiceId }),
       ...(model.trim() && { model: model.trim() }),
       ...(glossary && { glossary }),
@@ -387,6 +408,41 @@ export default function NuevaPlaticaPage() {
               ))}
             </select>
           </Field>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field
+              label="Visualizador del orador"
+              help='Solo aplica en modo "Presentar todo en uno".'
+            >
+              <select
+                value={presenterVisualizer}
+                onChange={(e) => setPresenterVisualizer(e.target.value as PresenterVisualizer)}
+                className="input"
+              >
+                {VISUALIZER_OPTIONS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Esquina del visualizador"
+              help='Posición sobre el slide en modo "todo en uno".'
+            >
+              <select
+                value={overlayCorner}
+                onChange={(e) => setOverlayCorner(e.target.value as OverlayCorner)}
+                className="input"
+              >
+                {OVERLAY_CORNER_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
           <Field label="Modo de avance" required>
             <div className="space-y-2">

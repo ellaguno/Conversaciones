@@ -33,6 +33,26 @@ export const SLIDE_TRANSITIONS: SlideTransition[] = [
   'zoom',
 ];
 
+// Modo "live" de la vista de proyección: muestra el visualizador del agente
+// sobre el slide en una esquina configurable. Solo se aplica cuando se abre
+// /presentar/[id]?mode=live (la vista actual `?mode=poll` no usa estos campos).
+export type OverlayCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export const OVERLAY_CORNERS: OverlayCorner[] = [
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+];
+
+export type PresenterVisualizer = 'aura' | 'wave' | 'bar' | 'grid' | 'radial';
+export const PRESENTER_VISUALIZERS: PresenterVisualizer[] = [
+  'aura',
+  'wave',
+  'bar',
+  'grid',
+  'radial',
+];
+
 export interface PlaticaManifest {
   id: string;
   title: string;
@@ -51,6 +71,8 @@ export interface PlaticaManifest {
   narrative_tone: string;
   advance_mode?: AdvanceMode; // default 'hybrid'
   slide_transition?: SlideTransition; // default 'fade'
+  presenter_overlay_corner?: OverlayCorner; // default 'top-right'
+  presenter_visualizer?: PresenterVisualizer; // default 'aura'
   voice_id?: string;
   model?: string; // OpenRouter model ID; overrides personality model if present
   glossary?: Record<string, string>;
@@ -175,6 +197,24 @@ export function validateManifestPayload(raw: unknown):
       error: `slide_transition debe ser uno de: ${SLIDE_TRANSITIONS.join(', ')}`,
     };
   }
+  if (
+    m.presenter_overlay_corner !== undefined &&
+    !OVERLAY_CORNERS.includes(m.presenter_overlay_corner as OverlayCorner)
+  ) {
+    return {
+      ok: false,
+      error: `presenter_overlay_corner debe ser uno de: ${OVERLAY_CORNERS.join(', ')}`,
+    };
+  }
+  if (
+    m.presenter_visualizer !== undefined &&
+    !PRESENTER_VISUALIZERS.includes(m.presenter_visualizer as PresenterVisualizer)
+  ) {
+    return {
+      ok: false,
+      error: `presenter_visualizer debe ser uno de: ${PRESENTER_VISUALIZERS.join(', ')}`,
+    };
+  }
   if (m.voice_id !== undefined && typeof m.voice_id !== 'string') {
     return { ok: false, error: 'voice_id debe ser una cadena' };
   }
@@ -193,6 +233,9 @@ export function validateManifestPayload(raw: unknown):
       narrative_tone: (m.narrative_tone as string).trim(),
       advance_mode: (m.advance_mode as AdvanceMode | undefined) ?? 'hybrid',
       slide_transition: (m.slide_transition as SlideTransition | undefined) ?? 'fade',
+      presenter_overlay_corner:
+        (m.presenter_overlay_corner as OverlayCorner | undefined) ?? 'top-right',
+      presenter_visualizer: (m.presenter_visualizer as PresenterVisualizer | undefined) ?? 'aura',
       voice_id: (m.voice_id as string | undefined)?.trim() || undefined,
       model: (m.model as string | undefined)?.trim() || undefined,
       glossary: (m.glossary as Record<string, string> | undefined) ?? undefined,

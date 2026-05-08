@@ -116,6 +116,7 @@ export default function PlaticasListPage() {
                     href={`/presentar/${p.id}`}
                     target="_blank"
                     className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
+                    title="Solo proyección — sin audio (requiere otro device para conversar con el agente)"
                   >
                     proyección
                   </Link>
@@ -125,9 +126,18 @@ export default function PlaticasListPage() {
                   >
                     editar
                   </Link>
+                  <Link
+                    href={`/presentar/${p.id}?mode=live`}
+                    target="_blank"
+                    className="rounded-full border border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
+                    title="Slide + orador en una sola pantalla (audio incluido)"
+                  >
+                    Todo en uno
+                  </Link>
                   <button
                     onClick={() => startPlatica(p.id, p.personality_key)}
                     className="rounded-full bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-white uppercase hover:bg-amber-700"
+                    title="Iniciar la sesión de chat (operador) — proyección en otra pantalla"
                   >
                     Iniciar
                   </button>

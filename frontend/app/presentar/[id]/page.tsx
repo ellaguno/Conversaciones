@@ -1,30 +1,39 @@
 'use client';
 
-// Vista pública de proyección — pantalla completa, sin chrome. Pensada para
-// abrirse en la laptop conectada al cañón. Phase 1 (este archivo) maneja
-// navegación manual con teclado para verificar render. Phase 2 conectará al
-// LiveKit room y reemplazará el teclado por eventos `slide_change` publicados
-// por el agente Tato o por la vista de control.
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
-import type { PlaticaGuion, PlaticaManifest, SlideTransition } from '@/lib/platica-schema';
+// Vista de proyección. Dos modos:
+//   ?mode=poll (default) — solo lee el state file del agente. No se une a
+//     LiveKit, no produce minutos. Usado cuando proyección y operador están
+//     en pantallas separadas.
+//   ?mode=live — se une al room de LiveKit usando la misma identidad y token
+//     que la vista de chat. Reproduce el audio del agente, muestra el
+//     visualizador del orador en una esquina configurable, y expone controles
+//     mínimos abajo (mute / leave / arrows). Diseñado para escenarios de una
+//     sola pantalla.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { TokenSource } from 'livekit-client';
+import { useLocalParticipant, useSession } from '@livekit/components-react';
+import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
+import { PresenterOverlay } from '@/components/presenter/presenter-overlay';
+import type {
+  OverlayCorner,
+  PlaticaGuion,
+  PlaticaManifest,
+  PresenterVisualizer,
+  SlideTransition,
+} from '@/lib/platica-schema';
 
-// Duración global del cambio de slide. Mantenerlo igual para todos los efectos
-// para que el operador pueda comparar A/B sin recalcular timing.
 const TRANSITION_MS = 600;
 
 export default function PresentarPage() {
   const params = useParams<{ id: string }>();
+  const search = useSearchParams();
   const id = params.id;
+  const mode = search.get('mode') === 'live' ? 'live' : 'poll';
+
   const [manifest, setManifest] = useState<PlaticaManifest | null>(null);
   const [guion, setGuion] = useState<PlaticaGuion | null>(null);
-  const [currentSlide, setCurrentSlide] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  // Slide saliente durante la transición. Cuando es null, solo renderizamos el
-  // slide actual sin animar. Lo seteamos al cambiar de slide y lo limpiamos
-  // cuando termina la animación.
-  const [prevSlide, setPrevSlide] = useState<number | null>(null);
-  const prevSlideRef = useRef<number>(1);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/platicas/${id}`, { credentials: 'include' })
@@ -36,20 +45,180 @@ export default function PresentarPage() {
       .then((data) => {
         setManifest(data.manifest);
         setGuion(data.guion);
-        // Si el primer slide está oculto, salta al primer slide visible para
-        // que la proyección no arranque mostrando un slide marcado para saltar.
-        const firstVisible = (data.guion as PlaticaGuion).blocks.find((b) => !b.hidden);
-        if (firstVisible) setCurrentSlide(firstVisible.slide);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
   }, [id]);
 
-  // Polling: every 500ms, fetch the agent-written state file. When the agent
-  // calls `avanzar_diapositiva`/`repasar_punto`/etc., the state file updates
-  // and this view follows. Keyboard navigation below remains as an offline
-  // override (e.g. for verifying renders without an active session).
+  if (loadError) {
+    return <FullScreenMessage>Error: {loadError}</FullScreenMessage>;
+  }
+  if (!manifest || !guion) {
+    return <FullScreenMessage>Cargando plática…</FullScreenMessage>;
+  }
+
+  if (mode === 'live') {
+    return <LiveMode id={id} manifest={manifest} guion={guion} />;
+  }
+  return <PollMode id={id} manifest={manifest} guion={guion} />;
+}
+
+// ─── PollMode (comportamiento original) ─────────────────────────────────
+function PollMode({
+  id,
+  manifest,
+  guion,
+}: {
+  id: string;
+  manifest: PlaticaManifest;
+  guion: PlaticaGuion;
+}) {
+  const projection = useProjection(id, manifest, guion);
+  return <ProjectionView id={id} manifest={manifest} guion={guion} {...projection} />;
+}
+
+// ─── LiveMode (nueva: une al room) ──────────────────────────────────────
+function LiveMode({
+  id,
+  manifest,
+  guion,
+}: {
+  id: string;
+  manifest: PlaticaManifest;
+  guion: PlaticaGuion;
+}) {
+  const router = useRouter();
+  // Advertencia: si ya hay una sesión activa (el operador la inició desde otro
+  // device/tab), unirse aquí dispara un segundo dispatch del agente —
+  // duplicando minutos. Verificamos antes de conectar.
+  const [warningState, setWarningState] = useState<'checking' | 'active' | 'ready'>('checking');
   useEffect(() => {
-    if (!manifest) return;
+    fetch(`/api/platicas/${id}/state`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.state?.active) setWarningState('active');
+        else setWarningState('ready');
+      })
+      .catch(() => setWarningState('ready'));
+  }, [id]);
+
+  if (warningState === 'checking') {
+    return <FullScreenMessage>Verificando sesiones activas…</FullScreenMessage>;
+  }
+  if (warningState === 'active') {
+    return (
+      <FullScreenMessage>
+        <div className="space-y-4 text-center">
+          <div className="text-xl font-semibold">Ya hay una plática activa</div>
+          <div className="max-w-md text-sm text-white/70">
+            Si continúas, se iniciará una segunda sesión paralela y se cobrarán minutos extra.
+            Cierra primero la otra pestaña/dispositivo si no es lo que quieres.
+          </div>
+          <div className="flex justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => router.push('/platicas')}
+              className="rounded-full border border-white/30 px-4 py-1.5 text-xs hover:bg-white/10"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarningState('ready')}
+              className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90"
+            >
+              Continuar de todos modos
+            </button>
+          </div>
+        </div>
+      </FullScreenMessage>
+    );
+  }
+  return <LiveModeConnected id={id} manifest={manifest} guion={guion} />;
+}
+
+function LiveModeConnected({
+  id,
+  manifest,
+  guion,
+}: {
+  id: string;
+  manifest: PlaticaManifest;
+  guion: PlaticaGuion;
+}) {
+  // Token y sesión, mismo patrón que app.tsx pero pidiendo solo lo necesario
+  // para una plática. personality_key = 'custom' funciona — el agente usa el
+  // presenter_persona del manifest como prompt base.
+  const tokenSource = useMemo(() => {
+    return TokenSource.custom(async () => {
+      const res = await fetch('/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personality: manifest.personality_key || 'custom',
+          platicaId: id,
+          ...(manifest.voice_id && { voiceId: manifest.voice_id }),
+          ...(manifest.model && { model: manifest.model }),
+        }),
+      });
+      if (!res.ok) throw new Error(`Token error: ${res.status}`);
+      return await res.json();
+    });
+  }, [id, manifest.personality_key, manifest.voice_id, manifest.model]);
+
+  const session = useSession(tokenSource);
+
+  // Auto-conectar al montar la vista.
+  useEffect(() => {
+    session.start?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <AgentSessionProvider session={session}>
+      <LiveProjection id={id} manifest={manifest} guion={guion} />
+    </AgentSessionProvider>
+  );
+}
+
+function LiveProjection({
+  id,
+  manifest,
+  guion,
+}: {
+  id: string;
+  manifest: PlaticaManifest;
+  guion: PlaticaGuion;
+}) {
+  const router = useRouter();
+  const projection = useProjection(id, manifest, guion);
+
+  return (
+    <>
+      <ProjectionView id={id} manifest={manifest} guion={guion} {...projection} />
+      <PresenterOverlay
+        corner={(manifest.presenter_overlay_corner as OverlayCorner) ?? 'top-right'}
+        visualizer={(manifest.presenter_visualizer as PresenterVisualizer) ?? 'aura'}
+      />
+      <BottomControls
+        onLeave={() => router.push('/platicas')}
+        onPrev={() => projection.navigatePrev()}
+        onNext={() => projection.navigateNext()}
+      />
+    </>
+  );
+}
+
+// ─── Hook compartido: estado del slide actual + polling + transición ──────
+function useProjection(id: string, manifest: PlaticaManifest, guion: PlaticaGuion) {
+  const [currentSlide, setCurrentSlide] = useState<number>(() => {
+    const firstVisible = guion.blocks.find((b) => !b.hidden);
+    return firstVisible?.slide ?? 1;
+  });
+  const [prevSlide, setPrevSlide] = useState<number | null>(null);
+  const prevSlideRef = useRef<number>(currentSlide);
+
+  // Polling del state file del agente.
+  useEffect(() => {
     let cancelled = false;
     let lastUpdatedAt = '';
     let wasActive = false;
@@ -63,19 +232,15 @@ export default function PresentarPage() {
         if (s?.active && s.updated_at && s.updated_at !== lastUpdatedAt) {
           lastUpdatedAt = s.updated_at;
           wasActive = true;
-          if (typeof s.current_slide === 'number') {
-            setCurrentSlide(s.current_slide);
-          }
+          if (typeof s.current_slide === 'number') setCurrentSlide(s.current_slide);
         } else if (!s?.active && wasActive) {
-          // Session ended (state file deleted on agent shutdown). Reset to
-          // slide 1 so the projection doesn't keep showing the last slide of
-          // the previous session.
           wasActive = false;
           lastUpdatedAt = '';
-          setCurrentSlide(1);
+          const firstVisible = guion.blocks.find((b) => !b.hidden);
+          setCurrentSlide(firstVisible?.slide ?? 1);
         }
       } catch {
-        // Polling errors are silent — the next tick will retry.
+        // silent retry next tick
       }
     };
     tick();
@@ -84,45 +249,9 @@ export default function PresentarPage() {
       cancelled = true;
       clearInterval(t);
     };
-  }, [id, manifest]);
+  }, [id, guion]);
 
-  // Keyboard navigation — Phase 1 fallback, useful for testing without an
-  // active agent session. Polling above takes precedence when an agent is live.
-  // Salta slides marcados como `hidden` para alinearse con lo que el agente
-  // narra (que también los filtra).
-  useEffect(() => {
-    if (!manifest || !guion) return;
-    const visible = guion.blocks.filter((b) => !b.hidden).map((b) => b.slide);
-    if (visible.length === 0) return;
-    const nextVisible = (s: number, dir: 1 | -1) => {
-      const sorted = dir === 1 ? visible : [...visible].reverse();
-      for (const v of sorted) {
-        if ((dir === 1 && v > s) || (dir === -1 && v < s)) return v;
-      }
-      return s;
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        setCurrentSlide((s) => nextVisible(s, 1));
-        e.preventDefault();
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        setCurrentSlide((s) => nextVisible(s, -1));
-        e.preventDefault();
-      } else if (e.key === 'Home') {
-        setCurrentSlide(visible[0]);
-        e.preventDefault();
-      } else if (e.key === 'End') {
-        setCurrentSlide(visible[visible.length - 1]);
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [manifest, guion]);
-
-  // Cada vez que cambia currentSlide arrancamos una transición: se renderizan
-  // ambos <img> (saliente con clase "leaving" y entrante con "entering"), y al
-  // cabo de TRANSITION_MS soltamos el saliente.
+  // Animación de transición entre slides.
   useEffect(() => {
     if (currentSlide === prevSlideRef.current) return;
     const leaving = prevSlideRef.current;
@@ -132,21 +261,64 @@ export default function PresentarPage() {
     return () => clearTimeout(t);
   }, [currentSlide]);
 
-  if (error) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black font-mono text-lg text-red-400">
-        Error: {error}
-      </div>
-    );
-  }
-  if (!manifest || !guion) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black font-mono text-white/60">
-        Cargando plática…
-      </div>
-    );
-  }
+  // Helpers de navegación manual (saltan ocultos).
+  const visible = useMemo(() => guion.blocks.filter((b) => !b.hidden).map((b) => b.slide), [guion]);
+  const navigateNext = useCallback(() => {
+    if (visible.length === 0) return;
+    setCurrentSlide((s) => {
+      for (const v of visible) if (v > s) return v;
+      return s;
+    });
+  }, [visible]);
+  const navigatePrev = useCallback(() => {
+    if (visible.length === 0) return;
+    setCurrentSlide((s) => {
+      for (let i = visible.length - 1; i >= 0; i--) if (visible[i] < s) return visible[i];
+      return s;
+    });
+  }, [visible]);
 
+  // Keyboard nav (también en live mode — útil como override del operador).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        navigateNext();
+        e.preventDefault();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        navigatePrev();
+        e.preventDefault();
+      } else if (e.key === 'Home') {
+        if (visible[0]) setCurrentSlide(visible[0]);
+        e.preventDefault();
+      } else if (e.key === 'End') {
+        const last = visible[visible.length - 1];
+        if (last) setCurrentSlide(last);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, navigateNext, navigatePrev]);
+
+  return { currentSlide, prevSlide, navigateNext, navigatePrev };
+}
+
+// ─── ProjectionView: render del slide y transiciones ──────────────────────
+function ProjectionView({
+  id,
+  manifest,
+  guion,
+  currentSlide,
+  prevSlide,
+}: {
+  id: string;
+  manifest: PlaticaManifest;
+  guion: PlaticaGuion;
+  currentSlide: number;
+  prevSlide: number | null;
+  navigateNext: () => void;
+  navigatePrev: () => void;
+}) {
   const block = guion.blocks.find((b) => b.slide === currentSlide);
   const hasMedia = block?.media != null;
   const transition: SlideTransition = manifest.slide_transition ?? 'fade';
@@ -180,150 +352,108 @@ export default function PresentarPage() {
           />
         </>
       )}
-      {/* Subtle progress indicator at the bottom; doesn't reveal slide numbers in
-          big numerals — only a thin bar so the audience doesn't focus on counting. */}
       <div className="absolute right-0 bottom-0 left-0 h-1 bg-white/5">
         <div
           className="h-full bg-white/30 transition-[width] duration-300"
           style={{ width: `${(currentSlide / manifest.slide_count) * 100}%` }}
         />
       </div>
-      <style jsx global>{`
-        /* Animaciones de cambio de slide. Duración fija (TRANSITION_MS=600ms)
-           para que el operador pueda comparar efectos sin re-cronometrar. */
-        @keyframes platica-fade-in {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        @keyframes platica-fade-out {
-          from {
-            opacity: 1;
-          }
-          to {
-            opacity: 0;
-          }
-        }
-        @keyframes platica-slide-left-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        @keyframes platica-slide-left-out {
-          from {
-            transform: translateX(0);
-            opacity: 1;
-          }
-          to {
-            transform: translateX(-100%);
-            opacity: 0;
-          }
-        }
-        @keyframes platica-slide-right-in {
-          from {
-            transform: translateX(-100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        @keyframes platica-slide-right-out {
-          from {
-            transform: translateX(0);
-            opacity: 1;
-          }
-          to {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-        }
-        @keyframes platica-slide-up-in {
-          from {
-            transform: translateY(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-        @keyframes platica-slide-up-out {
-          from {
-            transform: translateY(0);
-            opacity: 1;
-          }
-          to {
-            transform: translateY(-100%);
-            opacity: 0;
-          }
-        }
-        @keyframes platica-zoom-in {
-          from {
-            transform: scale(0.85);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-        @keyframes platica-zoom-out {
-          from {
-            transform: scale(1);
-            opacity: 1;
-          }
-          to {
-            transform: scale(1.15);
-            opacity: 0;
-          }
-        }
-        .transition-enter-fade {
-          animation: platica-fade-in 600ms ease forwards;
-        }
-        .transition-leave-fade {
-          animation: platica-fade-out 600ms ease forwards;
-        }
-        .transition-enter-slide_left {
-          animation: platica-slide-left-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-leave-slide_left {
-          animation: platica-slide-left-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-enter-slide_right {
-          animation: platica-slide-right-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-leave-slide_right {
-          animation: platica-slide-right-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-enter-slide_up {
-          animation: platica-slide-up-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-leave-slide_up {
-          animation: platica-slide-up-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-        .transition-enter-zoom {
-          animation: platica-zoom-in 600ms ease-out forwards;
-        }
-        .transition-leave-zoom {
-          animation: platica-zoom-out 600ms ease-out forwards;
-        }
-      `}</style>
+      <SlideTransitionStyles />
     </div>
   );
 }
 
-// Phase-2 hook: when block.media is set, render the appropriate player.
-// For now we render a clear placeholder so the operator notices media exists.
+// ─── BottomControls (solo en modo live) ──────────────────────────────────
+// Auto-hide a los 3s sin movimiento. Movimiento del mouse o tap los revive.
+function BottomControls({
+  onLeave,
+  onPrev,
+  onNext,
+}: {
+  onLeave: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const [visible, setVisible] = useState(true);
+  const { localParticipant } = useLocalParticipant();
+  const micEnabled = !!localParticipant?.isMicrophoneEnabled;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      setVisible(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setVisible(false), 3000);
+    };
+    reset();
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('touchstart', reset);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('mousemove', reset);
+      window.removeEventListener('touchstart', reset);
+    };
+  }, []);
+
+  return (
+    <div
+      className={`fixed inset-x-0 bottom-3 z-40 flex justify-center transition-opacity duration-300 ${
+        visible ? 'opacity-100' : 'pointer-events-none opacity-0'
+      }`}
+    >
+      <div className="flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1.5 text-white shadow-lg ring-1 ring-white/10 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={onPrev}
+          title="Slide anterior"
+          aria-label="Slide anterior"
+          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
+        >
+          ◀
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          title="Slide siguiente"
+          aria-label="Slide siguiente"
+          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
+        >
+          ▶
+        </button>
+        <div className="mx-1 h-4 w-px bg-white/20" />
+        <button
+          type="button"
+          onClick={() => localParticipant?.setMicrophoneEnabled(!micEnabled)}
+          title={micEnabled ? 'Mutear micrófono' : 'Activar micrófono'}
+          aria-label="Mute mic"
+          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
+        >
+          {micEnabled ? '🎤' : '🔇'}
+        </button>
+        <div className="mx-1 h-4 w-px bg-white/20" />
+        <button
+          type="button"
+          onClick={onLeave}
+          title="Salir de la plática"
+          aria-label="Salir"
+          className="rounded-full px-2.5 py-1 text-sm hover:bg-red-500/40"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Helpers / pieces sin lógica ─────────────────────────────────────────
+function FullScreenMessage({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black font-mono text-white/80">
+      {children}
+    </div>
+  );
+}
+
 function MediaPlaceholder({ block }: { block: PlaticaGuion['blocks'][number] }) {
   const m = block.media!;
   return (
@@ -338,5 +468,140 @@ function MediaPlaceholder({ block }: { block: PlaticaGuion['blocks'][number] }) 
         </div>
       </div>
     </div>
+  );
+}
+
+function SlideTransitionStyles() {
+  return (
+    <style jsx global>{`
+      /* Animaciones de cambio de slide. Duración fija (TRANSITION_MS=600ms)
+         para que el operador pueda comparar efectos sin re-cronometrar. */
+      @keyframes platica-fade-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes platica-fade-out {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+      @keyframes platica-slide-left-in {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes platica-slide-left-out {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(-100%);
+          opacity: 0;
+        }
+      }
+      @keyframes platica-slide-right-in {
+        from {
+          transform: translateX(-100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes platica-slide-right-out {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+      @keyframes platica-slide-up-in {
+        from {
+          transform: translateY(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      @keyframes platica-slide-up-out {
+        from {
+          transform: translateY(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateY(-100%);
+          opacity: 0;
+        }
+      }
+      @keyframes platica-zoom-in {
+        from {
+          transform: scale(0.85);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes platica-zoom-out {
+        from {
+          transform: scale(1);
+          opacity: 1;
+        }
+        to {
+          transform: scale(1.15);
+          opacity: 0;
+        }
+      }
+      .transition-enter-fade {
+        animation: platica-fade-in 600ms ease forwards;
+      }
+      .transition-leave-fade {
+        animation: platica-fade-out 600ms ease forwards;
+      }
+      .transition-enter-slide_left {
+        animation: platica-slide-left-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-leave-slide_left {
+        animation: platica-slide-left-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-enter-slide_right {
+        animation: platica-slide-right-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-leave-slide_right {
+        animation: platica-slide-right-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-enter-slide_up {
+        animation: platica-slide-up-in 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-leave-slide_up {
+        animation: platica-slide-up-out 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .transition-enter-zoom {
+        animation: platica-zoom-in 600ms ease-out forwards;
+      }
+      .transition-leave-zoom {
+        animation: platica-zoom-out 600ms ease-out forwards;
+      }
+    `}</style>
   );
 }

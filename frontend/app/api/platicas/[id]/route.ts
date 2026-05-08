@@ -84,6 +84,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       advance_mode: m.advance_mode ?? existing.advance_mode,
       slide_transition:
         m.slide_transition !== undefined ? m.slide_transition : existing.slide_transition,
+      presenter_overlay_corner:
+        m.presenter_overlay_corner !== undefined
+          ? m.presenter_overlay_corner
+          : existing.presenter_overlay_corner,
+      presenter_visualizer:
+        m.presenter_visualizer !== undefined
+          ? m.presenter_visualizer
+          : existing.presenter_visualizer,
       voice_id: m.voice_id !== undefined ? m.voice_id : existing.voice_id,
       model: m.model !== undefined ? m.model : existing.model,
       glossary: m.glossary !== undefined ? m.glossary : existing.glossary,
