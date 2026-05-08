@@ -48,6 +48,8 @@ const ALL_PERSONALITIES = [
   { key: 'imam', emoji: '☪️' },
   { key: 'rabino', emoji: '✡️' },
   { key: 'pandit', emoji: '🕉️' },
+  { key: 'ia_honesta', emoji: '🤖' },
+  { key: 'tato', emoji: '👋' },
 ];
 
 const PERSONALITY_CATEGORIES = [
@@ -60,6 +62,7 @@ const PERSONALITY_CATEGORIES = [
   { key: 'espiritual', name: 'Guía Espiritual', emoji: '🕊️' },
   { key: 'instructor', name: 'Instructor', emoji: '🎯' },
   { key: 'nutriologa', name: 'Nutrióloga', emoji: '🥗' },
+  { key: 'tato', name: 'Tato (Temixco)', emoji: '👋' },
 ];
 
 interface SettingsViewProps {

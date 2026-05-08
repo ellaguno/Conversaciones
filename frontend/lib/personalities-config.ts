@@ -814,6 +814,24 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     speed: 1.0,
     model: 'google/gemini-3-flash-preview',
   },
+  // Tato — asistente vecinal para conferencia de IA en Temixco
+  tato: {
+    name: 'Tato',
+    voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3', // Alejandro - Mentor Calmado
+    visualizer: 'wave',
+    temperature: 0.7,
+    speed: 0.9,
+    model: DEFAULT_MODEL,
+  },
+  // I.A. Honesta — sin filtros ni adulación
+  ia_honesta: {
+    name: 'I.A. Honesta',
+    voiceId: '15d0c2e2-8d29-44c3-be23-d585d5f154a1', // Pedro - Hablante Formal (MX)
+    visualizer: 'bar',
+    temperature: 0.3,
+    speed: 1.0,
+    model: DEFAULT_MODEL,
+  },
 };
 
 const STORAGE_KEY = 'personality-configs';

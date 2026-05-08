@@ -213,6 +213,7 @@ const PERSONALITY_SUBTITLE: Record<string, string> = {
   demo_vendedor_gastos: 'Demo Seguros',
   demo_cliente_vida: 'Demo Seguros',
   demo_cliente_gastos: 'Demo Seguros',
+  tato: 'Plática de IA',
 };
 
 function getSubtitle(key: string): string {

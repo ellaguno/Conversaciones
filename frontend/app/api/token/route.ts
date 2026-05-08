@@ -74,6 +74,8 @@ const VALID_PERSONALITIES = new Set([
   'demo_vendedor_gastos',
   'demo_cliente_vida',
   'demo_cliente_gastos',
+  'ia_honesta',
+  'tato',
 ]);
 
 export const revalidate = 0;
@@ -137,6 +139,10 @@ export async function POST(req: Request) {
     const therapyMethod = typeof body?.therapyMethod === 'string' ? body.therapyMethod : '';
     const coupleTherapy = body?.coupleTherapy === true;
     const demoProfile = typeof body?.demoProfile === 'string' ? body.demoProfile : '';
+    const platicaId =
+      typeof body?.platicaId === 'string' && /^[a-zA-Z0-9_-]+$/.test(body.platicaId)
+        ? body.platicaId
+        : '';
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
@@ -159,6 +165,7 @@ export async function POST(req: Request) {
       ...(therapyMethod && { therapyMethod }),
       ...(coupleTherapy && { coupleTherapy }),
       ...(demoProfile && { demoProfile }),
+      ...(platicaId && { platicaId }),
     });
 
     await roomService.createRoom({

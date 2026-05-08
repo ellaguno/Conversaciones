@@ -1,8 +1,9 @@
+import asyncio
+import json
+import logging
 import os
 import re
-import json
-import asyncio
-import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -152,6 +153,7 @@ async def entrypoint(ctx: JobContext):
     couple_therapy = False
     user_id = "default"
     demo_profile = ""
+    platica_id = None
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
@@ -162,6 +164,7 @@ async def entrypoint(ctx: JobContext):
         couple_therapy = bool(meta.get("coupleTherapy", False))
         user_id = meta.get("userId", "default")
         demo_profile = meta.get("demoProfile", "")
+        platica_id = meta.get("platicaId")
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -193,6 +196,22 @@ async def entrypoint(ctx: JobContext):
     else:
         personality = PERSONALITIES[DEFAULT_PERSONALITY]
     logger.info(f"Iniciando agente: {personality['name']} (key={personality_key})")
+
+    # Plática mode: load presentation guion if a platicaId came in the metadata.
+    # If found, this disables session-memory injection (the guion supersedes prior
+    # conversation context) and adds slide-control tools after agent construction.
+    platica = None
+    pres_state = None
+    if platica_id:
+        from platica_loader import load_platica
+        platica = load_platica(platica_id, DATA_DIR)
+        if platica is None:
+            logger.warning(f"Plática '{platica_id}' no encontrada — corriendo en modo normal")
+        else:
+            logger.info(
+                f"Plática cargada: '{platica.manifest.title}' "
+                f"({platica.manifest.slide_count} slides)"
+            )
 
     # Build instructions and tools
     tools = []
@@ -259,8 +278,9 @@ async def entrypoint(ctx: JobContext):
         instructions += f"\n\n--- PERFIL DE DEMO ---\nTu perfil de vendedor es: '{demo_profile}'. Ajusta tu estilo de venta según las instrucciones de ese perfil."
         logger.info(f"Demo vendedor, perfil: {demo_profile}")
 
-    # Inject session memory for non-therapy personalities with has_sessions
-    if manager is None and personality.get("has_sessions"):
+    # Inject session memory for non-therapy personalities with has_sessions.
+    # Skip when in Plática mode — the guión replaces conversational continuity.
+    if manager is None and personality.get("has_sessions") and platica is None:
         existing_summary = read_summary(user_id, personality_key)
         if existing_summary:
             instructions += (
@@ -272,11 +292,39 @@ async def entrypoint(ctx: JobContext):
             )
             logger.info(f"Contexto de sesiones previas inyectado para {personality_key}")
 
+    # Plática mode: stitch the three-block presentation prompt and register
+    # slide-control tools. The agent reference inside pres_state is back-filled
+    # after ComercianteAgent is instantiated below.
+    if platica is not None:
+        from presentation_tools import PresentationState, create_presentation_tools
+        state_file = DATA_DIR / "platicas" / platica.manifest.id / "_state.json"
+        pres_state = PresentationState(
+            platica=platica,
+            room=room,
+            base_personality_prompt=instructions,
+            state_file=state_file,
+            window=5,
+        )
+        instructions = pres_state.build_instructions()
+        tools = list(tools) + create_presentation_tools(pres_state)
+        logger.info(
+            f"Modo plática activo — slide inicial=1, ventana=±{pres_state.window}, "
+            f"{len(tools)} herramientas registradas"
+        )
+
     # Conversation log for all personalities (user-scoped)
     conv_log = ConversationLog(personality_key, personality["name"], user_id=user_id)
 
-    # Use custom voice/temperature/model if provided, otherwise use personality defaults
-    voice_id = custom_voice_id or personality["voice_id"]
+    # Use custom voice/temperature/model if provided, otherwise use personality defaults.
+    # Plática voice_id and model, when set on the manifest, take precedence over
+    # both metadata override and personality default — the plática's "casting" wins.
+    voice_id = (
+        (platica.manifest.voice_id if platica else None)
+        or custom_voice_id
+        or personality["voice_id"]
+    )
+    if platica is not None and platica.manifest.model:
+        custom_model = platica.manifest.model
     temperature = custom_temperature if custom_temperature is not None else 0.7
     llm_model = custom_model or "google/gemini-2.0-flash-001"
     # Speed: use custom if provided, otherwise default to 1.0
@@ -357,11 +405,24 @@ async def entrypoint(ctx: JobContext):
                 transcript.append({"role": item.role, "text": text})
                 logger.info(f"Transcripción [{item.role}]: {len(text)} caracteres")
 
-    notes_done = asyncio.Event()
-    notes_done.set()  # Default: no notes needed
+    async def _on_shutdown():
+        # Plática mode: stop the watchdog loop and clean up the live state file
+        # so the next session starts fresh and the process can exit cleanly.
+        if pres_state is not None:
+            wd = getattr(pres_state, "_watchdog_task", None)
+            if wd is not None and not wd.done():
+                wd.cancel()
+                try:
+                    await wd
+                except (asyncio.CancelledError, Exception):
+                    pass
+            try:
+                if pres_state.state_file.exists():
+                    pres_state.state_file.unlink()
+                    logger.info(f"State file eliminado: {pres_state.state_file}")
+            except Exception as e:
+                logger.warning(f"No se pudo eliminar state file: {e}")
 
-    @session.on("close")
-    def on_close(event):
         # Fallback: extract from chat context if event-based capture missed messages
         if len(transcript) < 2:
             logger.info("Extrayendo transcripción desde chat_ctx como fallback...")
@@ -386,20 +447,27 @@ async def entrypoint(ctx: JobContext):
         conv_log.save(transcript, start_time)
         logger.info(f"Conversación guardada: {conv_log.get_log_dir()}")
 
-        # Generate therapy notes for Dra. Ana, or lightweight summary for other personalities
+        # Generate therapy notes for Dra. Ana, or lightweight summary for other personalities.
+        # Awaited inline so livekit's shutdown sequence waits for completion before killing the process.
         if manager is not None:
-            notes_done.clear()
-            asyncio.create_task(_generate_notes_and_signal(
-                notes_done, manager, transcript, start_time
-            ))
+            await _generate_notes(manager, transcript, start_time)
         elif personality.get("has_sessions"):
-            notes_done.clear()
-            asyncio.create_task(_generate_summary_and_signal(
-                notes_done, user_id, personality_key, personality["name"], transcript
-            ))
+            try:
+                logger.info(f"Generando resumen de sesión para {personality_key}...")
+                await generate_summary(user_id, personality_key, personality["name"], transcript)
+                logger.info(f"Resumen de sesión generado para {personality_key}")
+            except Exception as e:
+                logger.error(f"Error generando resumen: {e}", exc_info=True)
+
+    ctx.add_shutdown_callback(_on_shutdown)
 
     has_vision = personality.get("has_vision", False) or personality_key in VISION_PERSONALITIES
     agent = ComercianteAgent(personality_key, instructions, tools, has_vision=has_vision)
+
+    # Back-fill the agent reference so presentation tools can mutate
+    # `agent.update_instructions(...)` when the slide changes.
+    if pres_state is not None:
+        pres_state.agent = agent
 
     start_kwargs = {"agent": agent, "room": ctx.room}
     if has_vision:
@@ -414,32 +482,93 @@ async def entrypoint(ctx: JobContext):
             instructions="Saluda al prospecto de forma breve y natural, preséntate y comienza tu pitch de ventas. No esperes a que el prospecto hable primero."
         )
 
-    # Keep process alive until notes finish generating
-    await notes_done.wait()
+    # Plática mode: kick off proactively so the audience hears narration
+    # immediately. The instruction is content-shaped ("hazlo") rather than
+    # meta ("ahora vas a..."), to keep DeepSeek/Gemini Flash from leaking it
+    # into Tato's voice.
+    if pres_state is not None:
+        await session.generate_reply(
+            instructions=(
+                "Saluda con calidez a la audiencia y comienza a contar el tema "
+                "del slide 1 según el bloque DETALLE."
+            )
+        )
 
+    # Plática silence watchdog: in 'auto' / 'hybrid' modes the audience expects
+    # continuous narration. If neither side speaks for >5s we prod the agent to
+    # keep going. In 'on_cue' mode silence is the design (Tato waits for a cue),
+    # so we skip the watchdog there.
+    if pres_state is not None and pres_state.platica.manifest.advance_mode != "on_cue":
+        watchdog_started = time.monotonic()
+        last_activity = time.monotonic()
+        last_trigger = 0.0
 
-async def _generate_notes_and_signal(
-    done_event: asyncio.Event, manager: SessionManager, transcript: list, start_time: datetime
-):
-    """Wrapper that signals completion so the process can exit."""
-    try:
-        await _generate_notes(manager, transcript, start_time)
-    finally:
-        done_event.set()
+        @session.on("user_state_changed")
+        def _on_user_state(_event):
+            nonlocal last_activity
+            last_activity = time.monotonic()
 
+        @session.on("conversation_item_added")
+        def _on_item_added_for_silence(_event):
+            nonlocal last_activity
+            last_activity = time.monotonic()
 
-async def _generate_summary_and_signal(
-    done_event: asyncio.Event, user_id: str, personality_key: str, personality_name: str, transcript: list
-):
-    """Generate lightweight session summary then signal completion."""
-    try:
-        logger.info(f"Generando resumen de sesión para {personality_key}...")
-        await generate_summary(user_id, personality_key, personality_name, transcript)
-        logger.info(f"Resumen de sesión generado para {personality_key}")
-    except Exception as e:
-        logger.error(f"Error generando resumen: {e}", exc_info=True)
-    finally:
-        done_event.set()
+        async def _silence_watchdog():
+            nonlocal last_activity, last_trigger
+            try:
+                while True:
+                    await asyncio.sleep(1.5)
+                    # Grace period: ignore the first 8s after session start so
+                    # the kickoff generate_reply has time to spin up the first
+                    # narration without being prodded mid-flight.
+                    if time.monotonic() - watchdog_started < 8.0:
+                        continue
+                    # Skip if anyone is currently speaking or the agent is mid-turn.
+                    user_state = getattr(session, "user_state", "listening")
+                    agent_state = getattr(session, "agent_state", "listening")
+                    if user_state == "speaking":
+                        continue
+                    if agent_state in ("speaking", "thinking", "initializing"):
+                        last_activity = time.monotonic()
+                        continue
+                    idle = time.monotonic() - last_activity
+                    cooldown = time.monotonic() - last_trigger
+                    if idle > 3.0 and cooldown > 5.0:
+                        current = pres_state.current_slide
+                        total = pres_state.platica.manifest.slide_count
+                        logger.info(
+                            f"Silence watchdog FIRING: idle={idle:.1f}s, "
+                            f"slide={current}/{total}, mode='{pres_state.platica.manifest.advance_mode}', "
+                            f"user_state={user_state}, agent_state={agent_state}"
+                        )
+                        try:
+                            # session.generate_reply returns a SpeechHandle
+                            # directly (not a coroutine) — calling it schedules
+                            # the speech and returns immediately. The instruction
+                            # uses CONTENT-only language so DeepSeek doesn't
+                            # verbalize the instruction itself.
+                            session.generate_reply(
+                                instructions=(
+                                    "Continúa la narración del tema actual con una nueva oración "
+                                    "o un ejemplo. Habla directamente a la audiencia."
+                                )
+                            )
+                            last_trigger = time.monotonic()
+                            last_activity = time.monotonic()
+                        except Exception as e:
+                            logger.warning(f"Silence watchdog generate_reply fallo: {e}")
+            except asyncio.CancelledError:
+                pass
+
+        watchdog_task = asyncio.create_task(_silence_watchdog())
+        logger.info(
+            f"Silence watchdog activo (modo plática '{pres_state.platica.manifest.advance_mode}', grace=8s)"
+        )
+
+        # Stash on pres_state so the shutdown callback can cancel it cleanly.
+        # Without this, the infinite-loop task keeps the process alive past
+        # session end, triggering the "process did not exit in time" kill.
+        pres_state._watchdog_task = watchdog_task
 
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):

@@ -60,6 +60,18 @@ const ALL_PERSONALITY_CATEGORIES = [
     description: 'Elige una especialidad',
     emoji: '🥗',
   },
+  {
+    key: 'ia_honesta',
+    name: 'I.A. Honesta',
+    description: 'Sin filtros ni adulación',
+    emoji: '🤖',
+  },
+  {
+    key: 'tato',
+    name: 'Tato',
+    description: 'Plática de IA en Temixco',
+    emoji: '👋',
+  },
 ];
 
 // Layout config: maps category key → position (1-6). 0 or absent = hidden.
@@ -75,6 +87,8 @@ const DEFAULT_LAYOUT: PersonalityLayout = {
   espiritual: 7,
   instructor: 8,
   nutriologa: 9,
+  ia_honesta: 10,
+  tato: 11,
 };
 
 export function loadPersonalityLayout(
@@ -94,6 +108,27 @@ export function loadPersonalityLayout(
 
 export function savePersonalityLayout(layout: PersonalityLayout) {
   localStorage.setItem('personality-layout', JSON.stringify(layout));
+}
+
+// Auto-start helper: when /platicas#Iniciar routes the user back to '/' with a
+// pending plática stashed in sessionStorage, fire onStartCall once on mount.
+function PlaticaAutoStart({
+  onStartCall,
+}: {
+  onStartCall: (personality: string, patientId?: string, therapy?: TherapyOptions) => void;
+}) {
+  useEffect(() => {
+    const id = sessionStorage.getItem('pending_platica_id');
+    const personality = sessionStorage.getItem('pending_platica_personality');
+    if (!id || !personality) return;
+    sessionStorage.removeItem('pending_platica_id');
+    sessionStorage.removeItem('pending_platica_personality');
+    // Fire after a tick so the parent's state is settled.
+    const t = setTimeout(() => onStartCall(personality, undefined, { platicaId: id }), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 function getVisiblePersonalities(layout: PersonalityLayout) {
@@ -315,6 +350,9 @@ function useGeneratingStatus() {
 export interface TherapyOptions {
   therapyMethod?: string;
   coupleTherapy?: boolean;
+  // Despite the name, this options bag also carries Plática context. When set,
+  // the agent loads the corresponding presentation guion and runs in plática mode.
+  platicaId?: string;
 }
 
 interface WelcomeViewProps {
@@ -546,6 +584,25 @@ export const WelcomeView = ({
 
         <p className="text-muted-foreground mb-5 text-sm">Elige con quien quieres hablar</p>
 
+        {/* Plática mode entry point. The full list/CRUD lives at /platicas; here
+            we only show a compact link plus auto-start (handled in PlaticaAutoStart
+            below) when the user comes from the list with a selection in flight. */}
+        <PlaticaAutoStart onStartCall={onStartCall} />
+        <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
+              Pláticas con presentación
+            </span>
+            <span className="text-muted-foreground text-[11px]">PDF + guion + agente narrador</span>
+          </div>
+          <Link
+            href="/platicas"
+            className="rounded-full bg-amber-600 px-3 py-1.5 font-mono text-[11px] font-bold tracking-wider text-white uppercase hover:bg-amber-700"
+          >
+            Mis pláticas
+          </Link>
+        </div>
+
         {preselectedBanner && (
           <div className="mb-4 flex w-full max-w-md items-center justify-between rounded-xl border-2 border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-2.5">
             <span className="text-foreground text-sm">
@@ -620,7 +677,7 @@ export const WelcomeView = ({
                 onClick={() => onSelectPersonality(p.key)}
                 className={`flex flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all ${
                   selectedPersonality === p.key
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 shadow-md'
+                    ? 'scale-[1.03] border-[var(--accent)] bg-[var(--accent)]/25 shadow-lg ring-2 ring-[var(--accent)]/30'
                     : 'border-border hover:border-muted-foreground/50'
                 }`}
               >
@@ -1134,7 +1191,11 @@ export const WelcomeView = ({
                           ? selectedTrader
                           : isAsesor
                             ? selectedAdvisor
-                            : selectedPersonality;
+                            : isInstructor
+                              ? selectedInstructor
+                              : isNutriologa
+                                ? selectedNutritionist
+                                : selectedPersonality;
                 const count = conversationCounts[effectiveKey] || 0;
                 if (count > 0 && onViewConversations) {
                   return (

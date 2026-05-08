@@ -91,7 +91,7 @@ export async function GET(req: Request) {
       .map((d) => {
         const dirPath = join(conversationsBase, d);
         const files = readdirSync(dirPath)
-          .filter((f) => f.endsWith('.md'))
+          .filter((f) => f.endsWith('.md') && f !== 'summary.md')
           .sort()
           .reverse();
 

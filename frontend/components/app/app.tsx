@@ -81,6 +81,7 @@ function SessionInner({
   isAdmin,
   therapyMethod,
   coupleTherapy,
+  platicaId,
   initialPatientId,
   isGuest,
   guestMinutes,
@@ -102,6 +103,7 @@ function SessionInner({
   isAdmin: boolean;
   therapyMethod: string;
   coupleTherapy: boolean;
+  platicaId: string;
   initialPatientId?: string;
   isGuest: boolean;
   guestMinutes: number;
@@ -122,6 +124,7 @@ function SessionInner({
           model: personalityConfig.model,
           ...(therapyMethod && { therapyMethod }),
           ...(coupleTherapy && { coupleTherapy }),
+          ...(platicaId && { platicaId }),
         }),
       });
       if (!res.ok) {
@@ -137,6 +140,7 @@ function SessionInner({
     personalityConfig.model,
     therapyMethod,
     coupleTherapy,
+    platicaId,
   ]);
 
   const session = useSession(
@@ -265,6 +269,7 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const [showSettings, setShowSettings] = useState(false);
   const [activeTherapyMethod, setActiveTherapyMethod] = useState('');
   const [activeCoupleTherapy, setActiveCoupleTherapy] = useState(false);
+  const [activePlaticaId, setActivePlaticaId] = useState('');
 
   // Guest mode state
   const [guestConfig, setGuestConfig] = useState<{
@@ -317,6 +322,7 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       setActivePatientId(patientId || '');
       setActiveTherapyMethod(therapy?.therapyMethod || '');
       setActiveCoupleTherapy(therapy?.coupleTherapy || false);
+      setActivePlaticaId(therapy?.platicaId || '');
       setAutoConnect(true);
       setSessionId((prev) => prev + 1);
     },
@@ -387,6 +393,7 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       isAdmin={isAdmin}
       therapyMethod={activeTherapyMethod}
       coupleTherapy={activeCoupleTherapy}
+      platicaId={activePlaticaId}
       initialPatientId={initialPatientId}
       isGuest={isGuest}
       guestMinutes={guestConfig?.guestMinutes || 10}
