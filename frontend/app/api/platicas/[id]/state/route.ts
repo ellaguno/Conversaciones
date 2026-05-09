@@ -32,7 +32,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!manifest) {
     return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
   }
-  if (manifest.owner_user_id !== session.user.id) {
+  // Lectura permitida al owner o a cualquiera si la plática está compartida.
+  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
   }
   const stateFile = join(getPlaticaDir(id), '_state.json');

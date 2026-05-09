@@ -28,7 +28,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!manifest) {
     return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
   }
-  if (manifest.owner_user_id !== session.user.id) {
+  // Lectura: el owner siempre, o cualquiera si está compartida (shared=true).
+  // Las escrituras (PATCH/DELETE más abajo) siguen siendo solo del owner.
+  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
   }
   const guion = readGuion(id);
@@ -92,6 +94,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         m.presenter_visualizer !== undefined
           ? m.presenter_visualizer
           : existing.presenter_visualizer,
+      shared: m.shared !== undefined ? m.shared : existing.shared,
       voice_id: m.voice_id !== undefined ? m.voice_id : existing.voice_id,
       model: m.model !== undefined ? m.model : existing.model,
       glossary: m.glossary !== undefined ? m.glossary : existing.glossary,

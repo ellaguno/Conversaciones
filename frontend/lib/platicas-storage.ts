@@ -170,7 +170,11 @@ export function listPlaticasForUser(userId: string): PlaticaListItem[] {
   for (const entry of entries) {
     const m = readManifest(entry);
     if (!m) continue;
-    if (m.owner_user_id !== userId) continue;
+    // El usuario ve sus propias pláticas y las que estén marcadas como
+    // shared (compartidas con todos los usuarios autenticados).
+    const isOwner = m.owner_user_id === userId;
+    const isShared = m.shared === true;
+    if (!isOwner && !isShared) continue;
     items.push({
       id: m.id,
       title: m.title,
@@ -178,9 +182,18 @@ export function listPlaticasForUser(userId: string): PlaticaListItem[] {
       slide_count: m.slide_count,
       created_at: m.created_at,
       advance_mode: m.advance_mode,
+      owner_user_id: m.owner_user_id,
+      shared: isShared,
     });
   }
-  items.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // Ordena propias primero, luego por fecha desc dentro de cada grupo, para
+  // que tu trabajo no quede sepultado bajo lo compartido por otros.
+  items.sort((a, b) => {
+    const aMine = a.owner_user_id === userId ? 0 : 1;
+    const bMine = b.owner_user_id === userId ? 0 : 1;
+    if (aMine !== bMine) return aMine - bMine;
+    return b.created_at.localeCompare(a.created_at);
+  });
   return items;
 }
 

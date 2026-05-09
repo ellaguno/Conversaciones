@@ -73,6 +73,10 @@ export interface PlaticaManifest {
   slide_transition?: SlideTransition; // default 'fade'
   presenter_overlay_corner?: OverlayCorner; // default 'top-right'
   presenter_visualizer?: PresenterVisualizer; // default 'aura'
+  // Si true, la plática aparece en la lista de TODOS los usuarios autenticados
+  // y cualquiera puede iniciarla / proyectarla. Solo el owner puede editarla,
+  // borrarla o cambiar el flag. Default false (privada).
+  shared?: boolean;
   voice_id?: string;
   model?: string; // OpenRouter model ID; overrides personality model if present
   glossary?: Record<string, string>;
@@ -135,6 +139,10 @@ export interface PlaticaListItem {
   slide_count: number;
   created_at: string;
   advance_mode?: AdvanceMode;
+  // Para que la UI distinga "es mía" vs "compartida por alguien más" y
+  // muestre o esconda los controles de edición.
+  owner_user_id: string;
+  shared: boolean;
 }
 
 // Validation helpers used by API routes when accepting upload payloads.
@@ -215,6 +223,9 @@ export function validateManifestPayload(raw: unknown):
       error: `presenter_visualizer debe ser uno de: ${PRESENTER_VISUALIZERS.join(', ')}`,
     };
   }
+  if (m.shared !== undefined && typeof m.shared !== 'boolean') {
+    return { ok: false, error: 'shared debe ser booleano' };
+  }
   if (m.voice_id !== undefined && typeof m.voice_id !== 'string') {
     return { ok: false, error: 'voice_id debe ser una cadena' };
   }
@@ -236,6 +247,7 @@ export function validateManifestPayload(raw: unknown):
       presenter_overlay_corner:
         (m.presenter_overlay_corner as OverlayCorner | undefined) ?? 'top-right',
       presenter_visualizer: (m.presenter_visualizer as PresenterVisualizer | undefined) ?? 'aura',
+      shared: (m.shared as boolean | undefined) ?? false,
       voice_id: (m.voice_id as string | undefined)?.trim() || undefined,
       model: (m.model as string | undefined)?.trim() || undefined,
       glossary: (m.glossary as Record<string, string> | undefined) ?? undefined,

@@ -35,7 +35,8 @@ export async function GET(
   if (!manifest) {
     return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
   }
-  if (manifest.owner_user_id !== session.user.id) {
+  // Lectura permitida al owner o a cualquiera si la plática está compartida.
+  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
   }
   // n is "001" (string) or "1"; accept both.

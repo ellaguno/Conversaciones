@@ -1,18 +1,22 @@
 'use client';
 
-// Listado de pláticas del usuario. Cada fila tiene "Iniciar" (lleva al usuario
-// a la home con la plática preseleccionada vía sessionStorage) y "Eliminar".
-// Botón principal arriba: "+ Nueva plática" → /platicas/nueva.
+// Listado de pláticas del usuario. Incluye sus propias pláticas y las que
+// otros usuarios han marcado como compartidas. Solo el owner ve los controles
+// de edición/borrado y el toggle de compartir.
 import { useEffect, useState } from 'react';
+import { useSession as useAuthSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { PlaticaListItem } from '@/lib/platica-schema';
 
 export default function PlaticasListPage() {
   const router = useRouter();
+  const { data: authSession } = useAuthSession();
+  const currentUserId = authSession?.user?.id;
   const [items, setItems] = useState<PlaticaListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [shareBusyId, setShareBusyId] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -38,6 +42,30 @@ export default function PlaticasListPage() {
     // (estamos dentro del click handler).
     window.open(`/presentar/${id}`, '_blank', 'noopener,noreferrer');
     router.push('/');
+  };
+
+  // Toggle del flag `shared`: PATCH al manifest. Optimista — actualizamos
+  // el item localmente y, si falla, refrescamos para reconciliar con el server.
+  const toggleShared = async (id: string, next: boolean) => {
+    setShareBusyId(id);
+    setItems((prev) => (prev ? prev.map((p) => (p.id === id ? { ...p, shared: next } : p)) : prev));
+    try {
+      const r = await fetch(`/api/platicas/${id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manifest: { shared: next } }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      await refresh();
+    } finally {
+      setShareBusyId(null);
+    }
   };
 
   const deletePlatica = async (id: string, title: string) => {
@@ -103,66 +131,98 @@ export default function PlaticasListPage() {
           </div>
         ) : (
           <ul className="space-y-2">
-            {items.map((p) => (
-              <li
-                key={p.id}
-                className="border-border bg-card flex items-center justify-between rounded-lg border p-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{p.title}</div>
-                  <div className="text-muted-foreground mt-0.5 text-xs">
-                    {p.slide_count} slides · personalidad <strong>{p.personality_key}</strong> ·
-                    avance <strong>{p.advance_mode ?? 'hybrid'}</strong> ·{' '}
-                    {new Date(p.created_at).toLocaleDateString('es-MX')}
+            {items.map((p) => {
+              const isOwner = !!currentUserId && p.owner_user_id === currentUserId;
+              return (
+                <li
+                  key={p.id}
+                  className="border-border bg-card flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="truncate text-sm font-semibold">{p.title}</div>
+                      {!isOwner && (
+                        <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-emerald-700 uppercase dark:text-emerald-300">
+                          Compartida
+                        </span>
+                      )}
+                      {isOwner && p.shared && (
+                        <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-emerald-700 uppercase dark:text-emerald-300">
+                          Pública
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground mt-0.5 text-xs">
+                      {p.slide_count} slides · personalidad <strong>{p.personality_key}</strong> ·
+                      avance <strong>{p.advance_mode ?? 'hybrid'}</strong> ·{' '}
+                      {new Date(p.created_at).toLocaleDateString('es-MX')}
+                    </div>
                   </div>
-                </div>
-                <div className="ml-3 flex shrink-0 items-center gap-2">
-                  {/* Pareja "Proyección + Iniciar": la proyección puede abrirse
+                  <div className="ml-3 flex shrink-0 items-center gap-2">
+                    {/* Pareja "Proyección + Iniciar": la proyección puede abrirse
                       sola desde otro device, pero al picar Iniciar también se
                       abre automáticamente en un tab nuevo — por eso van juntas
                       visualmente como un button group con borde compartido. */}
-                  <div className="inline-flex items-stretch overflow-hidden rounded-full border border-amber-600">
+                    <div className="inline-flex items-stretch overflow-hidden rounded-full border border-amber-600">
+                      <Link
+                        href={`/presentar/${p.id}`}
+                        target="_blank"
+                        className="border-r border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
+                        title="Solo proyección — útil si vas a abrirla manualmente en otro device"
+                      >
+                        Proyección
+                      </Link>
+                      <button
+                        onClick={() => startPlatica(p.id, p.personality_key)}
+                        className="bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-white uppercase hover:bg-amber-700"
+                        title="Inicia la sesión de chat (operador) Y abre la proyección en otro tab automáticamente"
+                      >
+                        Iniciar
+                      </button>
+                    </div>
                     <Link
-                      href={`/presentar/${p.id}`}
+                      href={`/presentar/${p.id}?mode=live`}
                       target="_blank"
-                      className="border-r border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
-                      title="Solo proyección — útil si vas a abrirla manualmente en otro device"
+                      className="rounded-full border border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
+                      title="Slide + orador en una sola pantalla (audio incluido)"
                     >
-                      Proyección
+                      Todo en uno
                     </Link>
-                    <button
-                      onClick={() => startPlatica(p.id, p.personality_key)}
-                      className="bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-white uppercase hover:bg-amber-700"
-                      title="Inicia la sesión de chat (operador) Y abre la proyección en otro tab automáticamente"
-                    >
-                      Iniciar
-                    </button>
+                    {isOwner && (
+                      <>
+                        <label
+                          className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs select-none"
+                          title="Si activas, todos los usuarios autenticados podrán ver, iniciar y proyectar esta plática (no editarla)"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={p.shared}
+                            disabled={shareBusyId === p.id}
+                            onChange={(e) => toggleShared(p.id, e.target.checked)}
+                            className="accent-emerald-600"
+                          />
+                          compartir
+                        </label>
+                        <Link
+                          href={`/platicas/${p.id}/editar`}
+                          className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
+                        >
+                          editar
+                        </Link>
+                        <button
+                          onClick={() => deletePlatica(p.id, p.title)}
+                          disabled={busyId === p.id}
+                          className="text-muted-foreground rounded p-1 text-xs hover:text-red-500 disabled:opacity-50"
+                          title="Eliminar"
+                        >
+                          {busyId === p.id ? '…' : '🗑'}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <Link
-                    href={`/presentar/${p.id}?mode=live`}
-                    target="_blank"
-                    className="rounded-full border border-amber-600 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-amber-700 uppercase hover:bg-amber-600/10 dark:text-amber-400"
-                    title="Slide + orador en una sola pantalla (audio incluido)"
-                  >
-                    Todo en uno
-                  </Link>
-                  <Link
-                    href={`/platicas/${p.id}/editar`}
-                    className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"
-                  >
-                    editar
-                  </Link>
-                  <button
-                    onClick={() => deletePlatica(p.id, p.title)}
-                    disabled={busyId === p.id}
-                    className="text-muted-foreground rounded p-1 text-xs hover:text-red-500 disabled:opacity-50"
-                    title="Eliminar"
-                  >
-                    {busyId === p.id ? '…' : '🗑'}
-                  </button>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
