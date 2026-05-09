@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TokenSource } from 'livekit-client';
-import { useLocalParticipant, useSession } from '@livekit/components-react';
+import { useLocalParticipant, useSession, useSessionContext } from '@livekit/components-react';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
 import { PresenterOverlay } from '@/components/presenter/presenter-overlay';
 import type {
@@ -257,6 +257,61 @@ function LiveProjection({
   setAudioSpeed: (v: number) => void;
 }) {
   const router = useRouter();
+  // useSessionContext expone `end()` desde el SessionProvider que mete
+  // AgentSessionProvider — mismo patrón que AgentDisconnectButton.
+  const sessionCtx = useSessionContext();
+
+  // Flujo de salida: en vez de navegar de vuelta directo, ofrecemos enviar
+  // la transcripción al correo del usuario. El agente la deja escrita en
+  // disco al desconectar; el endpoint /api/conversations/email recoge el
+  // archivo más reciente del usuario para esa personalidad.
+  const [leaveStage, setLeaveStage] = useState<'live' | 'asking' | 'sending' | 'sent' | 'failed'>(
+    'live'
+  );
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/profile', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => setUserEmail(typeof d?.email === 'string' ? d.email : null))
+      .catch(() => setUserEmail(null));
+  }, []);
+
+  const handleLeave = () => {
+    try {
+      sessionCtx?.end?.();
+    } catch {
+      // best-effort — si ya está desconectado, ignoramos
+    }
+    setLeaveStage('asking');
+  };
+
+  const handleSend = async () => {
+    setLeaveStage('sending');
+    setSendError(null);
+    try {
+      const res = await fetch('/api/conversations/email', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personality: manifest.personality_key || 'custom',
+          personalityName: manifest.title,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      setLeaveStage('sent');
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'Error al enviar');
+      setLeaveStage('failed');
+    }
+  };
+
+  const handleClose = () => router.push('/platicas');
 
   return (
     <>
@@ -266,13 +321,118 @@ function LiveProjection({
         visualizer={(manifest.presenter_visualizer as PresenterVisualizer) ?? 'aura'}
       />
       <BottomControls
-        onLeave={() => router.push('/platicas')}
+        onLeave={handleLeave}
         onPrev={() => projection.navigatePrev()}
         onNext={() => projection.navigateNext()}
         speed={audioSpeed}
         onSpeedChange={setAudioSpeed}
       />
+      {leaveStage !== 'live' && (
+        <LeaveTranscriptDialog
+          stage={leaveStage}
+          email={userEmail}
+          errorMsg={sendError}
+          onSend={handleSend}
+          onSkip={handleClose}
+          onClose={handleClose}
+          onRetry={handleSend}
+        />
+      )}
     </>
+  );
+}
+
+function LeaveTranscriptDialog({
+  stage,
+  email,
+  errorMsg,
+  onSend,
+  onSkip,
+  onClose,
+  onRetry,
+}: {
+  stage: 'asking' | 'sending' | 'sent' | 'failed';
+  email: string | null;
+  errorMsg: string | null;
+  onSend: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <FullScreenMessage>
+      <div className="max-w-md space-y-4 text-center">
+        <div className="text-xl font-semibold">Plática terminada</div>
+        {stage === 'asking' && (
+          <>
+            <div className="text-sm text-white/70">
+              ¿Quieres recibir la transcripción por correo
+              {email ? ` a ${email}` : ''}?
+            </div>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onSkip}
+                className="rounded-full border border-white/30 px-4 py-1.5 text-xs hover:bg-white/10"
+              >
+                No, gracias
+              </button>
+              <button
+                type="button"
+                onClick={onSend}
+                disabled={!email}
+                className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90 disabled:opacity-50"
+                title={email ? '' : 'No hay correo configurado en tu perfil'}
+              >
+                Enviar
+              </button>
+            </div>
+          </>
+        )}
+        {stage === 'sending' && (
+          <div className="text-sm text-white/70">Enviando transcripción…</div>
+        )}
+        {stage === 'sent' && (
+          <>
+            <div className="text-sm text-white/70">
+              Transcripción enviada{email ? ` a ${email}` : ''}.
+            </div>
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90"
+              >
+                Cerrar
+              </button>
+            </div>
+          </>
+        )}
+        {stage === 'failed' && (
+          <>
+            <div className="text-sm text-red-300">
+              No se pudo enviar: {errorMsg || 'error desconocido'}
+            </div>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-white/30 px-4 py-1.5 text-xs hover:bg-white/10"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90"
+              >
+                Reintentar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </FullScreenMessage>
   );
 }
 
