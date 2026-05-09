@@ -87,12 +87,23 @@ function LiveMode({
   guion: PlaticaGuion;
 }) {
   const router = useRouter();
-  // Advertencia: si ya hay una sesión activa (el operador la inició desde otro
-  // device/tab), unirse aquí dispara un segundo dispatch del agente —
-  // duplicando minutos. Verificamos antes de conectar.
+  // Advertencia: si el USUARIO ACTUAL ya tiene una sesión activa para esta
+  // plática (otra pestaña/device suyos), unirse aquí dispara un segundo
+  // dispatch — duplicando minutos. Solo nos importan SUS sesiones, no las
+  // de otros usuarios viendo la misma plática compartida (esos corren en
+  // rooms aislados). El roomName del usuario vive en localStorage, escrito
+  // por el token-fetch de app.tsx o de este mismo componente.
   const [warningState, setWarningState] = useState<'checking' | 'active' | 'ready'>('checking');
   useEffect(() => {
-    fetch(`/api/platicas/${id}/state`, { credentials: 'include' })
+    const ownRoom =
+      typeof window !== 'undefined' ? window.localStorage.getItem(`platica_session_${id}`) : null;
+    if (!ownRoom) {
+      setWarningState('ready');
+      return;
+    }
+    fetch(`/api/platicas/${id}/state?session=${encodeURIComponent(ownRoom)}`, {
+      credentials: 'include',
+    })
       .then((r) => r.json())
       .then((data) => {
         if (data?.state?.active) setWarningState('active');
@@ -161,7 +172,19 @@ function LiveModeConnected({
         }),
       });
       if (!res.ok) throw new Error(`Token error: ${res.status}`);
-      return await res.json();
+      const data = await res.json();
+      // Persistir el roomName de esta sesión: el warning de mode=live, otra
+      // pestaña con la proyección abierta, etc. lo necesitan para leer su
+      // state file específico (`_state_<roomName>.json`) y no el de otra
+      // sesión paralela del mismo platica id.
+      if (data?.roomName && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(`platica_session_${id}`, data.roomName);
+        } catch {
+          // noop
+        }
+      }
+      return data;
     });
   }, [id, manifest.personality_key, manifest.voice_id, manifest.model]);
 
@@ -182,21 +205,37 @@ function LiveModeConnected({
   const currentBlock = guion.blocks.find((b) => b.slide === projection.currentSlide);
   const isMediaSlide = !!currentBlock?.media;
 
-  // Volumen del orador, controlado por el slider de la barra inferior.
-  // RoomAudioRenderer toma 0..1 (la HTML <audio>.volume es 0..1, no admite
-  // boost arriba de 1). Si necesitas más ganancia que el máximo, hay que
-  // meter Web Audio + GainNode — futuro.
-  const [audioVolume, setAudioVolume] = useState(1.0);
+  // Velocidad de reproducción del orador. Es client-side: ajusta el
+  // playbackRate de los <audio> elements que crea RoomAudioRenderer. No
+  // afecta al agente ni al TTS server-side — solo cambia qué tan rápido
+  // se reproduce lo que ya llegó. Modern browsers preservan pitch por
+  // default, así que 0.85x suena natural, no chipmunk-inverso.
+  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  useEffect(() => {
+    const apply = () => {
+      document.querySelectorAll('audio').forEach((el) => {
+        // preservesPitch evita que la voz suene a chipmunk/aplastada cuando
+        // se ajusta playbackRate. Default es true en Chrome/Firefox/Safari
+        // modernos pero lo seteamos explícito para no depender del default.
+        el.preservesPitch = true;
+        if (el.playbackRate !== audioSpeed) el.playbackRate = audioSpeed;
+      });
+    };
+    apply();
+    const obs = new MutationObserver(apply);
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, [audioSpeed]);
 
   return (
-    <AgentSessionProvider session={session} muted={isMediaSlide} volume={audioVolume}>
+    <AgentSessionProvider session={session} muted={isMediaSlide}>
       <LiveProjection
         id={id}
         manifest={manifest}
         guion={guion}
         projection={projection}
-        audioVolume={audioVolume}
-        setAudioVolume={setAudioVolume}
+        audioSpeed={audioSpeed}
+        setAudioSpeed={setAudioSpeed}
       />
     </AgentSessionProvider>
   );
@@ -207,15 +246,15 @@ function LiveProjection({
   manifest,
   guion,
   projection,
-  audioVolume,
-  setAudioVolume,
+  audioSpeed,
+  setAudioSpeed,
 }: {
   id: string;
   manifest: PlaticaManifest;
   guion: PlaticaGuion;
   projection: ReturnType<typeof useProjection>;
-  audioVolume: number;
-  setAudioVolume: (v: number) => void;
+  audioSpeed: number;
+  setAudioSpeed: (v: number) => void;
 }) {
   const router = useRouter();
 
@@ -230,8 +269,8 @@ function LiveProjection({
         onLeave={() => router.push('/platicas')}
         onPrev={() => projection.navigatePrev()}
         onNext={() => projection.navigateNext()}
-        volume={audioVolume}
-        onVolumeChange={setAudioVolume}
+        speed={audioSpeed}
+        onSpeedChange={setAudioSpeed}
       />
     </>
   );
@@ -246,14 +285,37 @@ function useProjection(id: string, manifest: PlaticaManifest, guion: PlaticaGuio
   const [prevSlide, setPrevSlide] = useState<number | null>(null);
   const prevSlideRef = useRef<number>(currentSlide);
 
+  // Session-aware polling: si conocemos el roomName de la sesión propia (lo
+  // escribió el operador en localStorage al despachar el agente), usamos
+  // ?session=<roomName> para no leer el state file de otra sesión paralela.
+  // Si no lo conocemos (ej. invitado en plática compartida), el endpoint
+  // elige el `_state_*.json` más reciente.
+  const [sessionRoom, setSessionRoom] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(`platica_session_${id}`);
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `platica_session_${id}`;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key) return;
+      setSessionRoom(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [id]);
+
   // Polling del state file del agente.
   useEffect(() => {
     let cancelled = false;
     let lastUpdatedAt = '';
     let wasActive = false;
+    const stateUrl = sessionRoom
+      ? `/api/platicas/${id}/state?session=${encodeURIComponent(sessionRoom)}`
+      : `/api/platicas/${id}/state`;
     const tick = async () => {
       try {
-        const r = await fetch(`/api/platicas/${id}/state`, { credentials: 'include' });
+        const r = await fetch(stateUrl, { credentials: 'include' });
         if (!r.ok) return;
         const body = await r.json();
         if (cancelled) return;
@@ -278,7 +340,7 @@ function useProjection(id: string, manifest: PlaticaManifest, guion: PlaticaGuio
       cancelled = true;
       clearInterval(t);
     };
-  }, [id, guion]);
+  }, [id, guion, sessionRoom]);
 
   // Animación de transición entre slides.
   useEffect(() => {
@@ -398,14 +460,14 @@ function BottomControls({
   onLeave,
   onPrev,
   onNext,
-  volume,
-  onVolumeChange,
+  speed,
+  onSpeedChange,
 }: {
   onLeave: () => void;
   onPrev: () => void;
   onNext: () => void;
-  volume: number;
-  onVolumeChange: (v: number) => void;
+  speed: number;
+  onSpeedChange: (v: number) => void;
 }) {
   const [visible, setVisible] = useState(true);
   const { localParticipant } = useLocalParticipant();
@@ -466,21 +528,21 @@ function BottomControls({
         <div className="mx-1 h-4 w-px bg-white/20" />
         <div
           className="flex items-center gap-1.5 px-1.5"
-          title="Volumen del orador"
-          aria-label="Volumen del orador"
+          title="Velocidad del orador"
+          aria-label="Velocidad del orador"
         >
-          <span className="text-xs">🔊</span>
+          <span className="text-xs">⏱</span>
           <input
             type="range"
-            min={0}
-            max={1}
+            min={0.7}
+            max={1.3}
             step={0.05}
-            value={volume}
-            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            value={speed}
+            onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
             className="h-1 w-20 cursor-pointer accent-amber-500"
           />
           <span className="font-mono text-[10px] text-white/60 tabular-nums">
-            {Math.round(volume * 100)}
+            {speed.toFixed(2)}x
           </span>
         </div>
         <div className="mx-1 h-4 w-px bg-white/20" />

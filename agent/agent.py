@@ -316,7 +316,11 @@ async def entrypoint(ctx: JobContext):
     # after ComercianteAgent is instantiated below.
     if platica is not None:
         from presentation_tools import PresentationState, create_presentation_tools
-        state_file = DATA_DIR / "platicas" / platica.manifest.id / "_state.json"
+        # State file scopeado por room — dos usuarios viendo la misma plática
+        # corren en rooms distintos y NO deben pisarse el slide actual ni
+        # disparar warnings cruzados de "ya hay sesión activa".
+        safe_room = "".join(c for c in room_name if c.isalnum() or c in "_-") or "default"
+        state_file = DATA_DIR / "platicas" / platica.manifest.id / f"_state_{safe_room}.json"
         pres_state = PresentationState(
             platica=platica,
             room=room,
@@ -428,7 +432,7 @@ async def entrypoint(ctx: JobContext):
         # Plática mode: stop the watchdog loop and clean up the live state file
         # so the next session starts fresh and the process can exit cleanly.
         if pres_state is not None:
-            for task_attr in ("_watchdog_task", "_pacing_task"):
+            for task_attr in ("_watchdog_task", "_pacing_task", "_heartbeat_task"):
                 t = getattr(pres_state, task_attr, None)
                 if t is not None and not t.done():
                     t.cancel()
@@ -503,14 +507,14 @@ async def entrypoint(ctx: JobContext):
         )
 
     # Plática mode: kick off proactively so the audience hears narration
-    # immediately. The instruction is content-shaped ("hazlo") rather than
-    # meta ("ahora vas a..."), to keep DeepSeek/Gemini Flash from leaking it
-    # into Tato's voice.
+    # immediately. La instruction tiene que ser meta-mínima — palabras como
+    # "saluda", "DETALLE", "audiencia" se filtran al TTS con modelos chicos.
+    # Pedimos contenido directo: la apertura natural del primer slide.
     if pres_state is not None:
         await session.generate_reply(
             instructions=(
-                "Saluda con calidez a la audiencia y comienza a contar el tema "
-                "del slide 1 según el bloque DETALLE."
+                "Empieza ahora con el tema del primer slide, abriendo con un saludo cálido "
+                "y breve. Sin meta-comentarios."
             )
         )
 
@@ -564,13 +568,14 @@ async def entrypoint(ctx: JobContext):
                         try:
                             # session.generate_reply returns a SpeechHandle
                             # directly (not a coroutine) — calling it schedules
-                            # the speech and returns immediately. The instruction
-                            # uses CONTENT-only language so DeepSeek doesn't
-                            # verbalize the instruction itself.
+                            # the speech and returns immediately. La instruction
+                            # debe ser meta-mínima: imperativos como "habla",
+                            # "narra", "continúa" se filtran al output con
+                            # modelos pequeños. Pedimos solo lo que NO es habla.
                             session.generate_reply(
                                 instructions=(
-                                    "Continúa la narración del tema actual con una nueva oración "
-                                    "o un ejemplo. Habla directamente a la audiencia."
+                                    "Genera una oración nueva de contenido sobre el tema "
+                                    "del slide actual. Sin meta-comentarios."
                                 )
                             )
                             last_trigger = time.monotonic()
@@ -630,6 +635,23 @@ async def entrypoint(ctx: JobContext):
         pacing_task = asyncio.create_task(_pacing_nudge())
         pres_state._pacing_task = pacing_task
         logger.info("Pacing nudge activo (tick=10s, umbral=85% del duration_sec)")
+
+        # State heartbeat: refresca `updated_at` en disco cada 20s para que
+        # /api/platicas/[id]/state pueda distinguir una sesión viva de un
+        # archivo huérfano dejado por un crash sucio. Sin esto, un kill -9
+        # del worker deja `_state.json` ahí y los warnings "Ya hay una plática
+        # activa" se vuelven falsos positivos eternos.
+        async def _state_heartbeat():
+            try:
+                while True:
+                    await asyncio.sleep(20.0)
+                    pres_state.write_state_to_disk()
+            except asyncio.CancelledError:
+                pass
+
+        heartbeat_task = asyncio.create_task(_state_heartbeat())
+        pres_state._heartbeat_task = heartbeat_task
+        logger.info("State heartbeat activo (tick=20s)")
 
 
 async def _generate_notes(manager: SessionManager, transcript: list, start_time: datetime):

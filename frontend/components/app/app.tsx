@@ -130,7 +130,19 @@ function SessionInner({
       if (!res.ok) {
         throw new Error(`Token error: ${res.status}`);
       }
-      return await res.json();
+      const data = await res.json();
+      // Handoff: para que la proyección abierta antes (window.open desde
+      // /platicas) pueda leer el state file específico de ESTA sesión, le
+      // dejamos el roomName en localStorage. La proyección está en la misma
+      // origin → escucha el `storage` event y se sincroniza al instante.
+      if (platicaId && data?.roomName && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(`platica_session_${platicaId}`, data.roomName);
+        } catch {
+          // noop — Safari modo privado etc.
+        }
+      }
+      return data;
     });
   }, [
     personality,
