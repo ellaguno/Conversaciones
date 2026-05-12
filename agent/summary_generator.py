@@ -6,7 +6,7 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger("comerciante-con-voz")
 
-FAST_MODEL = "google/gemini-2.0-flash-001"
+FAST_MODEL = "google/gemini-2.5-flash"
 
 _client = None
 

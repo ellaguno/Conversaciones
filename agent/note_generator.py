@@ -10,7 +10,7 @@ from session_manager import SessionManager
 logger = logging.getLogger("comerciante-con-voz")
 
 # Conversation model (fast, cheap) — used as fallback for simple tasks like agenda
-FAST_MODEL = "google/gemini-2.0-flash-001"
+FAST_MODEL = "google/gemini-2.5-flash"
 
 # Analysis model (intelligent, slower) — used for clinical notes, plans, profiles
 # Read from settings.json first, then env var, then default

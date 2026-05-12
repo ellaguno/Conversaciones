@@ -11,6 +11,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { CARTESIA_VOICES_ES } from '@/lib/personalities-config';
 import {
   type AdvanceMode,
+  type AudienceMode,
   DEFAULT_PRESENTER,
   type GuionBlock,
   type OverlayCorner,
@@ -58,6 +59,17 @@ const TRANSITION_OPTIONS: { value: SlideTransition; label: string; help: string 
 const VOICE_GENDER_MAP: Record<string, PresenterGender> = Object.fromEntries(
   CARTESIA_VOICES_ES.map((v) => [v.id, v.gender === 'F' ? 'mujer' : 'hombre'])
 );
+
+const AUDIENCE_MODE_DESCRIPTIONS: Record<AudienceMode, { label: string; help: string }> = {
+  open: {
+    label: 'Abierto (default)',
+    help: 'El micrófono del oyente está encendido todo el tiempo. Puede interrumpir o preguntar cuando quiera. Recomendado para talleres y plática íntima.',
+  },
+  silent: {
+    label: 'Silencioso (conferencia)',
+    help: 'El micrófono inicia muteado. Para preguntar, el oyente toca el botón 🖐 "Levantar mano" y al terminar la lámina actual se abre una ventana corta de Q&A. Ideal para conferencia con audiencia grande.',
+  },
+};
 
 const ADVANCE_MODE_DESCRIPTIONS: Record<AdvanceMode, { label: string; help: string }> = {
   hybrid: {
@@ -172,10 +184,12 @@ export default function EditarPlaticaPage() {
       audience_profile: manifest.audience_profile,
       narrative_tone: manifest.narrative_tone,
       advance_mode: manifest.advance_mode,
+      audience_mode: manifest.audience_mode ?? 'open',
       slide_transition: manifest.slide_transition,
       presenter_overlay_corner: manifest.presenter_overlay_corner,
       presenter_visualizer: manifest.presenter_visualizer,
       voice_id: manifest.voice_id || undefined,
+      speed: manifest.speed ?? undefined,
       model: manifest.model || undefined,
       glossary,
       story_arcs: manifest.story_arcs,
@@ -397,10 +411,12 @@ export default function EditarPlaticaPage() {
       audience_profile: manifest.audience_profile,
       narrative_tone: manifest.narrative_tone,
       advance_mode: manifest.advance_mode,
+      audience_mode: manifest.audience_mode ?? 'open',
       slide_transition: manifest.slide_transition,
       presenter_overlay_corner: manifest.presenter_overlay_corner,
       presenter_visualizer: manifest.presenter_visualizer,
       voice_id: manifest.voice_id || undefined,
+      speed: manifest.speed ?? undefined,
       model: manifest.model || undefined,
       glossary,
       story_arcs: manifest.story_arcs,
@@ -558,6 +574,21 @@ export default function EditarPlaticaPage() {
           </div>
 
           <Field
+            label={`Velocidad inicial del orador: ${(manifest.speed ?? 1.0).toFixed(2)}x`}
+            help="Velocidad con la que arranca la presentación (Cartesia Sonic-3, rango 0.6–2.0). Puedes ajustarla en vivo desde la vista de proyección sin tocar este valor."
+          >
+            <input
+              type="range"
+              min={0.6}
+              max={2.0}
+              step={0.05}
+              value={manifest.speed ?? 1.0}
+              onChange={(e) => updateManifest({ speed: parseFloat(e.target.value) })}
+              className="w-full"
+            />
+          </Field>
+
+          <Field
             label="Personalidad del presentador"
             required
             help="Texto que se inyecta como system prompt del agente. Define cómo habla, qué reglas sigue y su tono."
@@ -579,7 +610,7 @@ export default function EditarPlaticaPage() {
               type="text"
               value={manifest.model ?? ''}
               onChange={(e) => updateManifest({ model: e.target.value || undefined })}
-              placeholder="ej. google/gemini-2.0-flash-001, anthropic/claude-haiku-4.5, deepseek/deepseek-v3.2-exp"
+              placeholder="ej. google/gemini-2.5-flash, anthropic/claude-haiku-4.5, deepseek/deepseek-v3.2-exp"
               className="input font-mono text-xs"
             />
           </Field>
@@ -660,6 +691,36 @@ export default function EditarPlaticaPage() {
                       value={m}
                       checked={checked}
                       onChange={() => updateManifest({ advance_mode: m })}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold">{info.label}</div>
+                      <div className="text-muted-foreground text-xs">{info.help}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Modo de audiencia" required>
+            <div className="space-y-2">
+              {(['open', 'silent'] as AudienceMode[]).map((m) => {
+                const info = AUDIENCE_MODE_DESCRIPTIONS[m];
+                const checked = (manifest.audience_mode ?? 'open') === m;
+                return (
+                  <label
+                    key={m}
+                    className={`border-border flex cursor-pointer gap-3 rounded-lg border p-3 ${
+                      checked ? 'border-primary bg-primary/5' : ''
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="audience_mode"
+                      value={m}
+                      checked={checked}
+                      onChange={() => updateManifest({ audience_mode: m })}
                       className="mt-0.5"
                     />
                     <div>

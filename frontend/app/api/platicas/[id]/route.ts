@@ -96,6 +96,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           : existing.presenter_visualizer,
       shared: m.shared !== undefined ? m.shared : existing.shared,
       voice_id: m.voice_id !== undefined ? m.voice_id : existing.voice_id,
+      speed: m.speed !== undefined ? m.speed : existing.speed,
+      audience_mode: m.audience_mode !== undefined ? m.audience_mode : existing.audience_mode,
       model: m.model !== undefined ? m.model : existing.model,
       glossary: m.glossary !== undefined ? m.glossary : existing.glossary,
       story_arcs: m.story_arcs !== undefined ? m.story_arcs : existing.story_arcs,

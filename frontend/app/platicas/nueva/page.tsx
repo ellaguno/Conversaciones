@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { CARTESIA_VOICES_ES } from '@/lib/personalities-config';
 import {
   type AdvanceMode,
+  type AudienceMode,
   DEFAULT_PRESENTER,
   type GuionBlock,
   type OverlayCorner,
@@ -60,6 +61,17 @@ type GuionMode = 'doc' | 'auto' | 'json';
 const VOICE_GENDER_MAP: Record<string, PresenterGender> = Object.fromEntries(
   CARTESIA_VOICES_ES.map((v) => [v.id, v.gender === 'F' ? 'mujer' : 'hombre'])
 );
+
+const AUDIENCE_MODE_DESCRIPTIONS: Record<AudienceMode, { label: string; help: string }> = {
+  open: {
+    label: 'Abierto (default)',
+    help: 'El micrófono del oyente está encendido todo el tiempo. Puede interrumpir o preguntar cuando quiera. Recomendado para talleres y plática íntima.',
+  },
+  silent: {
+    label: 'Silencioso (conferencia)',
+    help: 'El micrófono inicia muteado. Para preguntar, el oyente toca el botón 🖐 "Levantar mano" y al terminar la lámina actual se abre una ventana corta de Q&A. Ideal para conferencia con audiencia grande.',
+  },
+};
 
 const ADVANCE_MODE_DESCRIPTIONS: Record<AdvanceMode, { label: string; help: string }> = {
   hybrid: {
@@ -120,8 +132,10 @@ export default function NuevaPlaticaPage() {
   const [presenterGender, setPresenterGender] = useState<PresenterGender>(DEFAULT_PRESENTER.gender);
   const [presenterPersona, setPresenterPersona] = useState<string>(DEFAULT_PRESENTER.persona);
   const [voiceId, setVoiceId] = useState<string>(DEFAULT_PRESENTER.voice_id);
+  const [speed, setSpeed] = useState<number>(1.0);
   const [model, setModel] = useState('');
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('hybrid');
+  const [audienceMode, setAudienceMode] = useState<AudienceMode>('open');
   const [slideTransition, setSlideTransition] = useState<SlideTransition>('fade');
   const [overlayCorner, setOverlayCorner] = useState<OverlayCorner>('top-right');
   const [presenterVisualizer, setPresenterVisualizer] = useState<PresenterVisualizer>('aura');
@@ -266,10 +280,12 @@ export default function NuevaPlaticaPage() {
       audience_profile: audience.trim(),
       narrative_tone: tone.trim(),
       advance_mode: advanceMode,
+      audience_mode: audienceMode,
       slide_transition: slideTransition,
       presenter_overlay_corner: overlayCorner,
       presenter_visualizer: presenterVisualizer,
       ...(voiceId && { voice_id: voiceId }),
+      ...(speed !== 1.0 && { speed }),
       ...(model.trim() && { model: model.trim() }),
       ...(glossary && { glossary }),
     };
@@ -318,7 +334,7 @@ export default function NuevaPlaticaPage() {
               onChange={(e) => setTitle(e.target.value)}
               required
               className="input"
-              placeholder="Plática vecinal de IA — Temixco"
+              placeholder="Plática de IA para mortales"
             />
           </Field>
 
@@ -366,6 +382,21 @@ export default function NuevaPlaticaPage() {
           </div>
 
           <Field
+            label={`Velocidad inicial del orador: ${speed.toFixed(2)}x`}
+            help="Velocidad con la que arranca la presentación (Cartesia Sonic-3, rango 0.6–2.0). Puedes ajustarla en vivo desde la vista de proyección sin tocar este valor."
+          >
+            <input
+              type="range"
+              min={0.6}
+              max={2.0}
+              step={0.05}
+              value={speed}
+              onChange={(e) => setSpeed(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </Field>
+
+          <Field
             label="Personalidad del presentador"
             required
             help="Texto que se inyecta como system prompt del agente. Define cómo habla, qué reglas sigue y su tono."
@@ -387,7 +418,7 @@ export default function NuevaPlaticaPage() {
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="ej. google/gemini-2.0-flash-001, deepseek/deepseek-v3.2-exp, anthropic/claude-haiku-4.5"
+              placeholder="ej. google/gemini-2.5-flash, deepseek/deepseek-v3.2-exp, anthropic/claude-haiku-4.5"
               className="input font-mono text-xs"
             />
           </Field>
@@ -473,6 +504,35 @@ export default function NuevaPlaticaPage() {
             </div>
           </Field>
 
+          <Field label="Modo de audiencia" required>
+            <div className="space-y-2">
+              {(['open', 'silent'] as AudienceMode[]).map((m) => {
+                const info = AUDIENCE_MODE_DESCRIPTIONS[m];
+                return (
+                  <label
+                    key={m}
+                    className={`border-border flex cursor-pointer gap-3 rounded-lg border p-3 ${
+                      audienceMode === m ? 'border-primary bg-primary/5' : ''
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="audience_mode"
+                      value={m}
+                      checked={audienceMode === m}
+                      onChange={() => setAudienceMode(m)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold">{info.label}</div>
+                      <div className="text-muted-foreground text-xs">{info.help}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </Field>
+
           <Field
             label="Perfil de la audiencia"
             required
@@ -484,7 +544,7 @@ export default function NuevaPlaticaPage() {
               required
               rows={3}
               className="input"
-              placeholder="Adultos mayores de Temixco que conocen la IA por primera vez..."
+              placeholder="Adultos mayores que conocen la IA por primera vez..."
             />
           </Field>
 

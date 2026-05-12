@@ -53,6 +53,17 @@ export const PRESENTER_VISUALIZERS: PresenterVisualizer[] = [
   'radial',
 ];
 
+// Cómo se comporta el micrófono del oyente durante la presentación.
+//   'open'   — siempre encendido (default; comportamiento histórico). El oyente
+//              puede interrumpir o preguntar en cualquier momento.
+//   'silent' — apagado por default durante la narración. Para preguntar, el
+//              oyente "levanta la mano"; al terminar la lámina actual el agente
+//              abre una ventana de Q&A (mic on); cierra tras ~3s de silencio
+//              tras la última respuesta y avanza. Entre slides en hybrid/on_cue
+//              se prende brevemente para escuchar señales de avance.
+export type AudienceMode = 'open' | 'silent';
+export const AUDIENCE_MODES: AudienceMode[] = ['open', 'silent'];
+
 export interface PlaticaManifest {
   id: string;
   title: string;
@@ -73,11 +84,17 @@ export interface PlaticaManifest {
   slide_transition?: SlideTransition; // default 'fade'
   presenter_overlay_corner?: OverlayCorner; // default 'top-right'
   presenter_visualizer?: PresenterVisualizer; // default 'aura'
+  audience_mode?: AudienceMode; // default 'open'
   // Si true, la plática aparece en la lista de TODOS los usuarios autenticados
   // y cualquiera puede iniciarla / proyectarla. Solo el owner puede editarla,
   // borrarla o cambiar el flag. Default false (privada).
   shared?: boolean;
   voice_id?: string;
+  // Velocidad del orador (Cartesia Sonic-3). Rango válido 0.6–2.0; clampeado en
+  // el agente. Cuando viene en el manifest, se usa como velocidad inicial al
+  // arrancar la presentación; el slider del modo live puede sobrescribirla en
+  // vivo vía data channel sin tocar el manifest.
+  speed?: number;
   model?: string; // OpenRouter model ID; overrides personality model if present
   glossary?: Record<string, string>;
   story_arcs?: StoryArc[];
@@ -223,11 +240,25 @@ export function validateManifestPayload(raw: unknown):
       error: `presenter_visualizer debe ser uno de: ${PRESENTER_VISUALIZERS.join(', ')}`,
     };
   }
+  if (m.audience_mode !== undefined && !AUDIENCE_MODES.includes(m.audience_mode as AudienceMode)) {
+    return {
+      ok: false,
+      error: `audience_mode debe ser uno de: ${AUDIENCE_MODES.join(', ')}`,
+    };
+  }
   if (m.shared !== undefined && typeof m.shared !== 'boolean') {
     return { ok: false, error: 'shared debe ser booleano' };
   }
   if (m.voice_id !== undefined && typeof m.voice_id !== 'string') {
     return { ok: false, error: 'voice_id debe ser una cadena' };
+  }
+  if (m.speed !== undefined) {
+    if (typeof m.speed !== 'number' || !Number.isFinite(m.speed)) {
+      return { ok: false, error: 'speed debe ser un número' };
+    }
+    if (m.speed < 0.6 || m.speed > 2.0) {
+      return { ok: false, error: 'speed debe estar entre 0.6 y 2.0' };
+    }
   }
   if (m.model !== undefined && typeof m.model !== 'string') {
     return { ok: false, error: 'model debe ser una cadena' };
@@ -247,8 +278,10 @@ export function validateManifestPayload(raw: unknown):
       presenter_overlay_corner:
         (m.presenter_overlay_corner as OverlayCorner | undefined) ?? 'top-right',
       presenter_visualizer: (m.presenter_visualizer as PresenterVisualizer | undefined) ?? 'aura',
+      audience_mode: (m.audience_mode as AudienceMode | undefined) ?? 'open',
       shared: (m.shared as boolean | undefined) ?? false,
       voice_id: (m.voice_id as string | undefined)?.trim() || undefined,
+      speed: (m.speed as number | undefined) ?? undefined,
       model: (m.model as string | undefined)?.trim() || undefined,
       glossary: (m.glossary as Record<string, string> | undefined) ?? undefined,
       story_arcs: (m.story_arcs as StoryArc[] | undefined) ?? undefined,

@@ -62,7 +62,7 @@ const PERSONALITY_CATEGORIES = [
   { key: 'espiritual', name: 'Guía Espiritual', emoji: '🕊️' },
   { key: 'instructor', name: 'Instructor', emoji: '🎯' },
   { key: 'nutriologa', name: 'Nutrióloga', emoji: '🥗' },
-  { key: 'tato', name: 'Tato (Temixco)', emoji: '👋' },
+  { key: 'tato', name: 'Tato', emoji: '👋' },
 ];
 
 interface SettingsViewProps {

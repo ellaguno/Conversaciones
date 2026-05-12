@@ -11,7 +11,7 @@ import type { GuionBlock, PlaticaGuion } from './platica-schema';
 const execFileAsync = promisify(execFile);
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const LLM_MODEL = 'google/gemini-2.0-flash-001';
+const LLM_MODEL = 'google/gemini-2.5-flash';
 
 // Extracts text per page using `pdftotext`. Pages are separated by a form-feed
 // (\f) in the default output, which we use to split.

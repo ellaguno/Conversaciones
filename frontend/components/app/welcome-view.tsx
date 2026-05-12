@@ -69,7 +69,7 @@ const ALL_PERSONALITY_CATEGORIES = [
   {
     key: 'tato',
     name: 'Tato',
-    description: 'Plática de IA en Temixco',
+    description: 'Ayudante en pláticas',
     emoji: '👋',
   },
 ];
@@ -683,9 +683,9 @@ export const WelcomeView = ({
               <button
                 key={p.key}
                 onClick={() => onSelectPersonality(p.key)}
-                className={`flex flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all ${
+                className={`flex flex-col items-center rounded-xl border-[3px] px-3 py-2.5 transition-all ${
                   selectedPersonality === p.key
-                    ? 'scale-[1.03] border-[var(--accent)] bg-[var(--accent)]/25 shadow-lg ring-2 ring-[var(--accent)]/30'
+                    ? 'scale-[1.05] border-amber-500 bg-amber-500/15 shadow-xl ring-4 ring-amber-400/40 dark:border-amber-400 dark:bg-amber-400/15'
                     : 'border-border hover:border-muted-foreground/50'
                 }`}
               >
@@ -698,7 +698,7 @@ export const WelcomeView = ({
 
         {/* Famous character selector */}
         {isNormal && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedFamous}
               onChange={(e) => {
@@ -734,7 +734,7 @@ export const WelcomeView = ({
 
         {/* Lawyer specialty selector */}
         {isAbogado && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedLawyer}
               onChange={(e) => {
@@ -770,7 +770,7 @@ export const WelcomeView = ({
 
         {/* Trader market selector */}
         {isTrader && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedTrader}
               onChange={(e) => {
@@ -806,7 +806,7 @@ export const WelcomeView = ({
 
         {/* System advisor selector */}
         {isAsesor && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedAdvisor}
               onChange={(e) => setSelectedAdvisor(e.target.value)}
@@ -826,7 +826,7 @@ export const WelcomeView = ({
 
         {/* Language teacher selector */}
         {isIdiomas && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
@@ -846,7 +846,7 @@ export const WelcomeView = ({
 
         {/* Spiritual guide selector */}
         {isEspiritual && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedGuide}
               onChange={(e) => setSelectedGuide(e.target.value)}
@@ -863,7 +863,7 @@ export const WelcomeView = ({
 
         {/* Instructor selector */}
         {isInstructor && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedInstructor}
               onChange={(e) => {
@@ -899,7 +899,7 @@ export const WelcomeView = ({
 
         {/* Nutrióloga selector */}
         {isNutriologa && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             <select
               value={selectedNutritionist}
               onChange={(e) => setSelectedNutritionist(e.target.value)}
@@ -919,7 +919,7 @@ export const WelcomeView = ({
 
         {/* Dra. Ana patient selector */}
         {isPsicologo && (
-          <div className="mb-4 w-full max-w-sm">
+          <div className="animate-pulldown-attention mb-4 w-full max-w-sm">
             {/* Patient list */}
             {patients.length > 0 && (
               <div className="mb-3 flex flex-col gap-1.5">

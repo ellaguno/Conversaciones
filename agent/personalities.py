@@ -1047,7 +1047,7 @@ PERSONALITIES = {
             "Tu tono: amigable, paciente, sin prisa. Trata a cada persona como un vecino querido."
         ),
         "voice_id": "3a35daa1-ba81-451c-9b21-59332e9db2f3",  # Alejandro - Mentor Calmado
-        "description": "Presentador cálido para pláticas de divulgación",
+        "description": "Ayudante en pláticas",
         "has_sessions": True,
     },
     "ia_honesta": {

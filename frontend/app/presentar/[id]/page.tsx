@@ -11,7 +11,7 @@
 //     sola pantalla.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { TokenSource } from 'livekit-client';
+import { ParticipantEvent, RoomEvent, TokenSource } from 'livekit-client';
 import { useLocalParticipant, useSession, useSessionContext } from '@livekit/components-react';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
 import { PresenterOverlay } from '@/components/presenter/presenter-overlay';
@@ -168,6 +168,7 @@ function LiveModeConnected({
           personality: manifest.personality_key || 'custom',
           platicaId: id,
           ...(manifest.voice_id && { voiceId: manifest.voice_id }),
+          ...(typeof manifest.speed === 'number' && { speed: manifest.speed }),
           ...(manifest.model && { model: manifest.model }),
         }),
       });
@@ -180,6 +181,16 @@ function LiveModeConnected({
       if (data?.roomName && typeof window !== 'undefined') {
         try {
           window.localStorage.setItem(`platica_session_${id}`, data.roomName);
+          // El evento 'storage' solo se dispara entre pestañas — para que
+          // useProjection en ESTA pestaña reaccione al roomName recién
+          // creado, emitimos un CustomEvent local. Sin esto, el polling
+          // arranca con el roomName viejo de localStorage y se queda leyendo
+          // un state file que ya no existe.
+          window.dispatchEvent(
+            new CustomEvent('platica-session-set', {
+              detail: { id, roomName: data.roomName },
+            })
+          );
         } catch {
           // noop
         }
@@ -205,27 +216,12 @@ function LiveModeConnected({
   const currentBlock = guion.blocks.find((b) => b.slide === projection.currentSlide);
   const isMediaSlide = !!currentBlock?.media;
 
-  // Velocidad de reproducción del orador. Es client-side: ajusta el
-  // playbackRate de los <audio> elements que crea RoomAudioRenderer. No
-  // afecta al agente ni al TTS server-side — solo cambia qué tan rápido
-  // se reproduce lo que ya llegó. Modern browsers preservan pitch por
-  // default, así que 0.85x suena natural, no chipmunk-inverso.
-  const [audioSpeed, setAudioSpeed] = useState(1.0);
-  useEffect(() => {
-    const apply = () => {
-      document.querySelectorAll('audio').forEach((el) => {
-        // preservesPitch evita que la voz suene a chipmunk/aplastada cuando
-        // se ajusta playbackRate. Default es true en Chrome/Firefox/Safari
-        // modernos pero lo seteamos explícito para no depender del default.
-        el.preservesPitch = true;
-        if (el.playbackRate !== audioSpeed) el.playbackRate = audioSpeed;
-      });
-    };
-    apply();
-    const obs = new MutationObserver(apply);
-    obs.observe(document.body, { childList: true, subtree: true });
-    return () => obs.disconnect();
-  }, [audioSpeed]);
+  // Velocidad del orador. El valor inicial viene del manifest (configurable en
+  // el editor); los cambios se mandan por LiveKit data channel al agente, que
+  // llama tts.update_options(speed=...) sobre Cartesia. NO se puede hacer
+  // client-side: el audio remoto llega como MediaStream en vivo (srcObject) y
+  // <audio>.playbackRate sobre eso es no-op en todos los navegadores.
+  const [audioSpeed, setAudioSpeed] = useState<number>(manifest.speed ?? 1.0);
 
   return (
     <AgentSessionProvider session={session} muted={isMediaSlide}>
@@ -260,6 +256,126 @@ function LiveProjection({
   // useSessionContext expone `end()` desde el SessionProvider que mete
   // AgentSessionProvider — mismo patrón que AgentDisconnectButton.
   const sessionCtx = useSessionContext();
+  const { localParticipant } = useLocalParticipant();
+
+  // Coreografía del modo "silent": el oyente "levanta la mano" en un slide; al
+  // terminar el slide el agente abre una ventana de Q&A breve (mic on); cuando
+  // detecta silencio cierra y avanza. La mano vive local (single-screen v1) y
+  // se notifica al agente por data channel.
+  const audienceMode = manifest.audience_mode ?? 'open';
+  const [handRaisedSlide, setHandRaisedSlide] = useState<number | null>(null);
+  const [qaWindowOpen, setQaWindowOpen] = useState(false);
+  const [finalQa, setFinalQa] = useState(false);
+
+  // Publica un mensaje JSON en el topic 'control' del data channel — el agente
+  // lo escucha en su handler on('data_received'). Best-effort: si el room no
+  // está conectado, se silencia (los botones siguen reactivos en UI local).
+  const publishControl = useCallback(
+    (payload: object) => {
+      if (!localParticipant) return;
+      try {
+        const data = new TextEncoder().encode(JSON.stringify(payload));
+        void localParticipant.publishData(data, { reliable: true, topic: 'control' });
+      } catch {
+        // noop
+      }
+    },
+    [localParticipant]
+  );
+
+  // Próximo / anterior slide visible (saltando hidden=true). El agente recibe
+  // un número absoluto y enforce ahí sus reglas (floor de dwell, etc.).
+  const visibleSlides = useMemo(
+    () => guion.blocks.filter((b) => !b.hidden).map((b) => b.slide),
+    [guion]
+  );
+  const requestAdvance = useCallback(() => {
+    // ▶ cancela la mano (decisión de diseño) y pide avanzar al agente. El
+    // agente normalmente avanza al siguiente slide visible.
+    setHandRaisedSlide(null);
+    publishControl({ type: 'advance' });
+  }, [publishControl]);
+  const requestPrev = useCallback(() => {
+    setHandRaisedSlide(null);
+    const cur = projection.currentSlide;
+    let target: number | null = null;
+    for (let i = visibleSlides.length - 1; i >= 0; i--) {
+      if (visibleSlides[i] < cur) {
+        target = visibleSlides[i];
+        break;
+      }
+    }
+    if (target !== null) publishControl({ type: 'goto', slide: target });
+  }, [publishControl, projection.currentSlide, visibleSlides]);
+  const requestRaiseHand = useCallback(() => {
+    setHandRaisedSlide(projection.currentSlide);
+    publishControl({ type: 'hand_raised', slide: projection.currentSlide });
+  }, [publishControl, projection.currentSlide]);
+
+  // Escucha eventos del agente: qa_window_start/end avisan que el agente abrió
+  // o cerró la ventana de preguntas al terminar un slide; final_qa_start
+  // significa que llegó al último slide (Q&A general abierta).
+  useEffect(() => {
+    const room = sessionCtx?.room;
+    if (!room) return;
+    const handler = (payload: Uint8Array) => {
+      // El agente publica sin topic (state.publish); las otras presentaciones
+      // listening en la misma room son privadas a su componente, así que
+      // procesamos cualquier payload y filtramos por .type abajo.
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(payload)) as { type?: string };
+        if (msg.type === 'qa_window_start') setQaWindowOpen(true);
+        else if (msg.type === 'qa_window_end') {
+          setQaWindowOpen(false);
+          setHandRaisedSlide(null);
+        } else if (msg.type === 'final_qa_start') {
+          setFinalQa(true);
+          setQaWindowOpen(true);
+        }
+      } catch {
+        // not for us
+      }
+    };
+    room.on(RoomEvent.DataReceived, handler);
+    return () => {
+      room.off(RoomEvent.DataReceived, handler);
+    };
+  }, [sessionCtx?.room]);
+
+  // Cuando cambia el slide y la mano estaba levantada en uno anterior, limpiar.
+  // (El agente ya la borró al abrir/cerrar Q&A; esto es para que el ícono no
+  // quede colgado si la mano se levantó después y nunca hubo Q&A.)
+  useEffect(() => {
+    if (handRaisedSlide !== null && handRaisedSlide !== projection.currentSlide) {
+      setHandRaisedSlide(null);
+    }
+  }, [projection.currentSlide, handRaisedSlide]);
+
+  // Mic auto-state en silent mode. El problema: LiveKit publica el mic track
+  // automáticamente cuando la sesión arranca, así que setMicrophoneEnabled(false)
+  // llamado al mount puede ganar la carrera y luego el track aparece encendido.
+  // Solución: escuchar LocalTrackPublished y TrackUnmuted para re-enforcer cada
+  // vez que el estado diverge del deseado.
+  useEffect(() => {
+    if (audienceMode !== 'silent') return;
+    if (!localParticipant) return;
+    const shouldUnmute = qaWindowOpen || finalQa;
+    const enforce = () => {
+      const currentlyEnabled = !!localParticipant.isMicrophoneEnabled;
+      if (currentlyEnabled !== shouldUnmute) {
+        void localParticipant.setMicrophoneEnabled(shouldUnmute);
+      }
+    };
+    enforce();
+    // Re-enforcer SOLO en LocalTrackPublished — eso es el auto-publish del mic
+    // al conectar la sesión. NO escuchamos TrackUnmuted porque el usuario sí
+    // puede unmutearse manualmente desde el botón 🎤 para interrumpir (esa es
+    // la intención del diseño en silent mode).
+    localParticipant.on(ParticipantEvent.LocalTrackPublished, enforce);
+    return () => {
+      localParticipant.off(ParticipantEvent.LocalTrackPublished, enforce);
+    };
+  }, [audienceMode, qaWindowOpen, finalQa, localParticipant]);
 
   // Flujo de salida: en vez de navegar de vuelta directo, ofrecemos enviar
   // la transcripción al correo del usuario. El agente la deja escrita en
@@ -322,11 +438,17 @@ function LiveProjection({
       />
       <BottomControls
         onLeave={handleLeave}
-        onPrev={() => projection.navigatePrev()}
-        onNext={() => projection.navigateNext()}
+        onPrev={requestPrev}
+        onNext={requestAdvance}
+        onRaiseHand={requestRaiseHand}
         speed={audioSpeed}
         onSpeedChange={setAudioSpeed}
+        audienceMode={audienceMode}
+        handRaised={handRaisedSlide === projection.currentSlide}
+        qaOpen={qaWindowOpen}
       />
+      {handRaisedSlide === projection.currentSlide && !qaWindowOpen && <HandRaisedOverlay />}
+      {qaWindowOpen && <QaWindowBadge isFinal={finalQa} />}
       {leaveStage !== 'live' && (
         <LeaveTranscriptDialog
           stage={leaveStage}
@@ -339,6 +461,49 @@ function LiveProjection({
         />
       )}
     </>
+  );
+}
+
+// ─── Indicadores visuales del modo silent ────────────────────────────────
+// Mano grande semi-transparente para que el oyente vea que su intención de
+// preguntar quedó registrada. Vive en una esquina opuesta al PresenterOverlay
+// para no chocar con el visualizador del agente.
+function HandRaisedOverlay() {
+  return (
+    <div
+      className="pointer-events-none fixed right-6 bottom-20 z-30 text-7xl drop-shadow-lg select-none"
+      style={{ animation: 'hand-wave 1.6s ease-in-out infinite' }}
+      aria-label="Mano levantada"
+      role="img"
+    >
+      ✋
+      <style jsx>{`
+        @keyframes hand-wave {
+          0%,
+          100% {
+            transform: rotate(-8deg);
+            opacity: 0.7;
+          }
+          50% {
+            transform: rotate(8deg);
+            opacity: 0.95;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Pill arriba al centro mientras la ventana de Q&A está activa. Da feedback
+// claro de "ahora puedes hablar" para el oyente; cambia copy en final Q&A.
+function QaWindowBadge({ isFinal }: { isFinal: boolean }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center">
+      <div className="flex items-center gap-2 rounded-full bg-emerald-500/90 px-4 py-1.5 text-sm font-medium text-white shadow-lg">
+        <span className="text-base">🎤</span>
+        {isFinal ? 'Q&A abierta — haz tu pregunta' : 'Ventana de preguntas — habla ahora'}
+      </div>
+    </div>
   );
 }
 
@@ -461,8 +626,19 @@ function useProjection(id: string, manifest: PlaticaManifest, guion: PlaticaGuio
       if (e.key !== key) return;
       setSessionRoom(e.newValue);
     };
+    // 'storage' solo se dispara entre pestañas; el CustomEvent lo emite el
+    // tokenSource al recibir un roomName fresco en ESTA pestaña.
+    const onLocal = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string; roomName: string }>).detail;
+      if (detail?.id !== id) return;
+      setSessionRoom(detail.roomName);
+    };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('platica-session-set', onLocal);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('platica-session-set', onLocal);
+    };
   }, [id]);
 
   // Polling del state file del agente.
@@ -620,18 +796,29 @@ function BottomControls({
   onLeave,
   onPrev,
   onNext,
+  onRaiseHand,
   speed,
   onSpeedChange,
+  audienceMode,
+  handRaised,
+  qaOpen,
 }: {
   onLeave: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onRaiseHand: () => void;
   speed: number;
   onSpeedChange: (v: number) => void;
+  audienceMode: 'open' | 'silent';
+  handRaised: boolean;
+  qaOpen: boolean;
 }) {
   const [visible, setVisible] = useState(true);
-  const { localParticipant } = useLocalParticipant();
-  const micEnabled = !!localParticipant?.isMicrophoneEnabled;
+  // useLocalParticipant expone isMicrophoneEnabled como booleano reactivo —
+  // leerlo de localParticipant directamente da el snapshot, no re-renderea
+  // cuando cambia el mute. Esto hace que el ícono 🎤/🔇 refleje el estado real.
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
+  const micEnabled = isMicrophoneEnabled;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -649,6 +836,31 @@ function BottomControls({
       window.removeEventListener('touchstart', reset);
     };
   }, []);
+
+  // Cuando el usuario arrastra el slider de velocidad, evita inundar el data
+  // channel con cada onChange (que dispara por cada paso del slider). Se manda
+  // un solo mensaje 150ms después del último cambio — efecto perceptible
+  // como "casi inmediato" sin saturar al agente con interrupciones.
+  const speedSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendSpeed = useCallback(
+    (value: number) => {
+      onSpeedChange(value);
+      if (!localParticipant) return;
+      if (speedSendTimer.current) clearTimeout(speedSendTimer.current);
+      speedSendTimer.current = setTimeout(() => {
+        try {
+          const payload = new TextEncoder().encode(JSON.stringify({ type: 'speed', value }));
+          // reliable: true para que el cambio no se pierda en jitter de red.
+          // topic 'control' permite al agente filtrar fácil.
+          void localParticipant.publishData(payload, { reliable: true, topic: 'control' });
+        } catch {
+          // best-effort — si el room aún no está conectado, el slider seguirá
+          // funcionando localmente y el próximo arrastre re-intenta.
+        }
+      }, 150);
+    },
+    [localParticipant, onSpeedChange]
+  );
 
   return (
     <div
@@ -685,6 +897,29 @@ function BottomControls({
         >
           {micEnabled ? '🎤' : '🔇'}
         </button>
+        {audienceMode === 'silent' && (
+          <>
+            <div className="mx-1 h-4 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={onRaiseHand}
+              disabled={handRaised || qaOpen}
+              title={
+                qaOpen
+                  ? 'Q&A abierta — habla ahora'
+                  : handRaised
+                    ? 'Mano levantada — esperando fin de lámina'
+                    : 'Levantar la mano para preguntar al final de esta lámina'
+              }
+              aria-label="Levantar la mano"
+              className={`rounded-full px-2.5 py-1 text-sm transition ${
+                handRaised || qaOpen ? 'bg-amber-500/30 text-amber-200' : 'hover:bg-white/10'
+              } disabled:cursor-default`}
+            >
+              ✋
+            </button>
+          </>
+        )}
         <div className="mx-1 h-4 w-px bg-white/20" />
         <div
           className="flex items-center gap-1.5 px-1.5"
@@ -694,11 +929,11 @@ function BottomControls({
           <span className="text-xs">⏱</span>
           <input
             type="range"
-            min={0.7}
-            max={1.3}
+            min={0.6}
+            max={2.0}
             step={0.05}
             value={speed}
-            onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+            onChange={(e) => sendSpeed(parseFloat(e.target.value))}
             className="h-1 w-20 cursor-pointer accent-amber-500"
           />
           <span className="font-mono text-[10px] text-white/60 tabular-nums">

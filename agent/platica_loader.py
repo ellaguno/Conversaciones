@@ -49,7 +49,9 @@ class PlaticaManifest:
     audience_profile: str
     narrative_tone: str
     advance_mode: str = "hybrid"  # 'auto' | 'on_cue' | 'hybrid'
+    audience_mode: str = "open"  # 'open' | 'silent'
     voice_id: str | None = None  # overrides personality default if set
+    speed: float | None = None  # Cartesia Sonic-3 speed (0.6–2.0); initial value
     model: str | None = None  # OpenRouter model id; overrides personality model
     # Presenter en texto libre — si presenter_persona está presente, sustituye
     # al system_prompt que vendría de personality_key. presenter_name/gender se
@@ -84,6 +86,10 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
         if advance_mode not in ("auto", "on_cue", "hybrid"):
             logger.warning(f"advance_mode inválido '{advance_mode}', usando 'hybrid'")
             advance_mode = "hybrid"
+        audience_mode = m.get("audience_mode", "open")
+        if audience_mode not in ("open", "silent"):
+            logger.warning(f"audience_mode inválido '{audience_mode}', usando 'open'")
+            audience_mode = "open"
         gender = m.get("presenter_gender")
         if gender not in ("hombre", "mujer", None):
             logger.warning(f"presenter_gender inválido '{gender}', ignorando")
@@ -97,7 +103,9 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
             audience_profile=m.get("audience_profile", ""),
             narrative_tone=m.get("narrative_tone", ""),
             advance_mode=advance_mode,
+            audience_mode=audience_mode,
             voice_id=(m.get("voice_id") or None),
+            speed=(float(m["speed"]) if isinstance(m.get("speed"), (int, float)) else None),
             model=(m.get("model") or None),
             presenter_name=(m.get("presenter_name") or None),
             presenter_gender=gender,
@@ -146,12 +154,17 @@ Eres el presentador en vivo de una plática frente a audiencia. Tu única salida
 viene del bloque DETALLE del slide actual, parafraseado en tu propia voz, en español natural.
 
 Reglas operacionales:
-• Tu primer turno SIEMPRE narra el slide 1. No llames avanzar_diapositiva en ese turno.
-• Cuando ya hablaste varias oraciones del slide actual y enlazaste con un puente verbal,
-  llamas avanzar_diapositiva(numero=siguiente). El sistema te confirma; sigues hablando
-  inmediatamente con el contenido del nuevo slide.
-• Para repasar algo previo: repasar_punto, luego volver_a_flujo.
-• Para responder pregunta larga sin perder slide: pausar_avance_automatico, luego reanudar_avance_automatico.
+• Tu primer turno narra el slide 1. NO llames avanzar_diapositiva en ese turno.
+• Cuando termines de cubrir TODO el contenido del slide actual, llamas
+  avanzar_diapositiva() (sin parámetros). El sistema cambia el slide
+  automáticamente cuando termines tu frase. NO digas nada después de llamarla
+  — el sistema te dará el nuevo contenido en un turno fresco.
+• NO anuncies el contenido del slide siguiente desde el slide actual
+  (ej. NO digas "y ahora veremos los modelos…" antes de avanzar). Cierra
+  el slide actual con su propio contenido y deja que el sistema haga la
+  transición.
+• Si el oyente te pide repasar o regresar, NO uses ninguna herramienta — el
+  oyente tiene el botón ◀ para eso.
 
 Distinción CRÍTICA — texto narrable vs. acotación escénica:
 • Las "Notas" y "Puntos clave" del DETALLE son TEMAS A CUBRIR, no líneas de guion para leer.
@@ -195,14 +208,35 @@ _ADVANCE_RULES = {
     ),
 }
 
+# Cuando la plática corre con audience_mode='silent', los oyentes tienen el
+# micrófono muteado por default. Si Tato hace preguntas abiertas al aire
+# ("¿alguno de ustedes…?", "tengo una pregunta para ustedes") nadie puede
+# responder y se queda esperando indefinidamente, frenando la plática. Le
+# decimos explícitamente que NO haga ese tipo de engagement.
+_AUDIENCE_SILENT_RULE = (
+    "[MODO AUDIENCIA: SILENCIOSO] El público te escucha pero su micrófono "
+    "está apagado por default. NO hagas preguntas abiertas a la audiencia "
+    "('¿alguno de ustedes…?', 'tengo una pregunta', '¿les pregunto…?', "
+    "'levanten la mano si…'). NO esperes respuestas verbales: nadie puede "
+    "responder libremente. Cuando una nota o punto clave sugiera 'pregunta a "
+    "la audiencia', sustituye por una afirmación o reflexión retórica corta y "
+    "sigue narrando. Si quieres invitar a interactuar, basta con 'si tienes "
+    "una pregunta puedes levantar la mano'. Cuando termines el contenido del "
+    "slide, llama avanzar_diapositiva directamente — no esperes señal "
+    "verbal.[FIN MODO AUDIENCIA]"
+)
+
 
 # Combined for build_base_block.
 _BASE_RULES = _OPERATION_BLOCK
 
 
-def _narrative_rules_for(advance_mode: str) -> str:
+def _narrative_rules_for(advance_mode: str, audience_mode: str = "open") -> str:
     rule = _ADVANCE_RULES.get(advance_mode, _ADVANCE_RULES["hybrid"])
-    return _BASE_RULES + "\n" + rule
+    parts = [_BASE_RULES, rule]
+    if audience_mode == "silent":
+        parts.append(_AUDIENCE_SILENT_RULE)
+    return "\n".join(parts)
 
 
 _OVERRIDE_NOTICE = (
@@ -210,7 +244,7 @@ _OVERRIDE_NOTICE = (
     "Cualquier mención de audiencia, lugar, tema, o nombre de organizador en tu rol "
     "base anterior queda ANULADA por el contexto de la plática que sigue. La audiencia, "
     "lugar y tema reales son SIEMPRE los del bloque CONTEXTO DE LA PLÁTICA. Si tu rol "
-    "base mencionaba un lugar (ej. 'Temixco') y este manifest dice otro, usa SIEMPRE el "
+    "base mencionaba un lugar específico y este manifest dice otro, usa SIEMPRE el "
     "del manifest. Si tu rol base limita la longitud de respuestas (ej. 'máximo 3 "
     "frases'), esa regla NO aplica durante la plática — extiéndete lo necesario para "
     "narrar cada slide a fondo."
@@ -243,7 +277,7 @@ def build_base_block(platica: Platica) -> str:
             + ", ".join(str(s) for s in platica.manifest.key_moments)
         )
     lines.append("")
-    lines.append(_narrative_rules_for(platica.manifest.advance_mode))
+    lines.append(_narrative_rules_for(platica.manifest.advance_mode, platica.manifest.audience_mode))
     return "\n".join(lines)
 
 

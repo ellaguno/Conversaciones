@@ -24,6 +24,7 @@ export const CARTESIA_VOICES_ES = [
     gender: 'F',
   },
   { id: '399002e9-7f7d-42d4-a6a8-9b91bd809b9d', name: 'Diego - Entusiasta', gender: 'M' },
+  { id: 'acf43c61-39a7-440d-8089-21a8a7300f91', name: 'Eduardo Llaguno (clon)', gender: 'M' },
   { id: 'cefcb124-080b-4655-b31f-932f3ee743de', name: 'Elena - Narradora (ES)', gender: 'F' },
   { id: 'b0689631-eee7-4a6c-bb86-195f1d267c2e', name: 'Emilio - Optimista', gender: 'M' },
   { id: '79743797-2087-422f-8dc7-86f9efca85f1', name: 'Fran - Profesional Joven', gender: 'M' },
@@ -381,7 +382,7 @@ export function getVoiceForName(name: string): string {
   return gender === 'F' ? DEFAULT_FEMALE_VOICE : DEFAULT_MALE_VOICE;
 }
 
-export const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+export const DEFAULT_MODEL = 'google/gemini-2.5-flash';
 
 export interface PersonalityConfig {
   name: string;
@@ -814,7 +815,7 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     speed: 1.0,
     model: 'google/gemini-3-flash-preview',
   },
-  // Tato — asistente vecinal para conferencia de IA en Temixco
+  // Tato — ayudante genérico para pláticas de divulgación
   tato: {
     name: 'Tato',
     voiceId: '3a35daa1-ba81-451c-9b21-59332e9db2f3', // Alejandro - Mentor Calmado

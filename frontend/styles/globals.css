@@ -226,3 +226,23 @@
   pointer-events: none;
   height: 0;
 }
+
+/* Pulldown attention: ripple amber alrededor de los selects de sub-opción
+ * que aparecen cuando el usuario escoge una categoría de agente (ej. abogado
+ * → especialidad). Sin esto el dropdown se confunde con cualquier otro input.
+ * Mantenemos el contenido legible (no animamos opacity ni filter).
+ */
+@keyframes pulldown-attention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.4);
+  }
+}
+
+.animate-pulldown-attention {
+  border-radius: 0.75rem;
+  animation: pulldown-attention 1.6s ease-in-out infinite;
+}
