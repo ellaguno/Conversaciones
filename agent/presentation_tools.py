@@ -39,6 +39,13 @@ from livekit.agents import llm
 
 from platica_loader import Platica, build_full_instructions
 
+# Dwell mínimo en cada slide ANTES de que el LLM pueda avanzar. Sin esto, con
+# modelos chicos el LLM tiende a llamar avanzar_diapositiva tras un saludo
+# corto, antes de cubrir el contenido. Lo del slide 1 es más largo porque
+# normalmente incluye el saludo + introducción.
+MIN_DWELL_FIRST_SLIDE_SEC = 25.0
+MIN_DWELL_PER_SLIDE_SEC = 12.0
+
 if TYPE_CHECKING:
     import asyncio
 
@@ -254,6 +261,26 @@ def create_presentation_tools(state: PresentationState) -> list[llm.FunctionTool
             return (
                 f"Ya pediste cambiar al slide {state.pending_target}. Termina "
                 "tu frase actual y el sistema cambia."
+            )
+        # Dwell mínimo: rechaza llamadas prematuras. Sin esto el LLM tiende a
+        # avanzar tras un saludo corto y la transición se programa antes de
+        # que haya cubierto el contenido del slide.
+        elapsed = time.monotonic() - state.slide_entered_at
+        floor = (
+            MIN_DWELL_FIRST_SLIDE_SEC
+            if state.current_slide == 1
+            else MIN_DWELL_PER_SLIDE_SEC
+        )
+        if elapsed < floor:
+            remaining = int(floor - elapsed) + 1
+            logger.info(
+                f"avanzar_diapositiva rechazado: solo {int(elapsed)}s en slide "
+                f"{state.current_slide} (mínimo {int(floor)}s)"
+            )
+            return (
+                f"Aún llevas solo {int(elapsed)} segundos en este slide; el "
+                f"contenido necesita cubrirse con calma. Sigue narrando al "
+                f"menos {remaining} segundos más antes de avanzar."
             )
         state.pending_target = next_vis
         logger.info(

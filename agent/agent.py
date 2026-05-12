@@ -7,6 +7,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 from dotenv import load_dotenv
 
 # Load env BEFORE local imports that read env vars at module level (e.g. note_generator)
@@ -378,6 +380,13 @@ async def entrypoint(ctx: JobContext):
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENAI_API_KEY"),
             temperature=temperature,
+            # Default del plugin es read=5s — demasiado corto cuando Gemini se
+            # tarda en arrancar (contexto largo del manifest + window de slides).
+            # Subimos read a 30s; connect/write/pool quedan razonables. Sin esto
+            # el primer generate_reply de cada slide nuevo a veces se cancela
+            # y Tato se queda mudo. Ver also max_retries=2 para resiliencia.
+            timeout=httpx.Timeout(connect=15.0, read=30.0, write=10.0, pool=10.0),
+            max_retries=2,
         ),
         tts=cartesia.TTS(
             model="sonic-3",
