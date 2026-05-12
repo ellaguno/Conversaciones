@@ -3,9 +3,9 @@
 # bump-version.sh — Incrementa la versión del proyecto.
 #
 # Uso:
-#   ./scripts/bump-version.sh patch   # 0.6.0 → 0.6.1
-#   ./scripts/bump-version.sh minor   # 0.6.0 → 0.7.0
-#   ./scripts/bump-version.sh major   # 0.6.0 → 1.0.0
+#   ./scripts/bump-version.sh patch   # 1.5.0 → 1.5.1
+#   ./scripts/bump-version.sh minor   # 1.5.0 → 1.6.0
+#   ./scripts/bump-version.sh major   # 1.5.0 → 2.0.0
 #   ./scripts/bump-version.sh         # sin argumento: muestra la versión actual
 
 set -euo pipefail

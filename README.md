@@ -2,7 +2,7 @@
 
 Plataforma de conversaciones por voz con agentes de IA especializados. Permite hablar en tiempo real con distintas personalidades: traders, abogados, psicologos, asesores de sistemas, guias espirituales y personajes famosos.
 
-**Version**: 0.6.0
+**Version**: 1.5.0
 
 ## Caracteristicas principales
 
@@ -207,8 +207,10 @@ Soporta multiples enfoques terapeuticos:
 ## Scripts
 
 ```bash
-# Actualizar version en todo el proyecto
-./scripts/bump-version.sh 0.7.0
+# Actualizar version en todo el proyecto (VERSION, package.json, pyproject.toml)
+./scripts/bump-version.sh patch   # 1.5.0 -> 1.5.1
+./scripts/bump-version.sh minor   # 1.5.0 -> 1.6.0
+./scripts/bump-version.sh major   # 1.5.0 -> 2.0.0
 
 # Migrar datos al sistema multi-usuario
 ./scripts/migrate-to-multiuser.sh

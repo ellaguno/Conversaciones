@@ -1,4 +1,4 @@
-# Guia del Usuario - Comerciante con Voz v0.6.0
+# Guia del Usuario - Comerciante con Voz v1.5.0
 
 ## Que es Comerciante con Voz
 
