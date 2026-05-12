@@ -231,15 +231,37 @@ class PresentationState:
             }
         )
         await self.refresh_instructions()
-        # Kick off LLM para que narre el nuevo slide. NO mencionar lo que viene
-        # (evita "ahora veremos X" antes de cambiar al slide siguiente).
+        # Truncar chat_ctx para que el LLM no arrastre narración del slide
+        # anterior. truncate preserva el primer mensaje system (el prompt
+        # actualizado) y descarta los turns de assistant/user viejos —
+        # exactamente lo que queremos para evitar "bleed" donde el LLM
+        # reproduce el contenido del slide previo en lugar del nuevo.
+        if self.agent is not None:
+            try:
+                # chat_ctx es read-only; hay que .copy() para poder mutar.
+                truncated = self.agent.chat_ctx.copy().truncate(max_items=1)
+                await self.agent.update_chat_ctx(truncated)
+            except Exception as e:
+                logger.warning(f"chat_ctx truncate fallo: {e}")
+        # Kick off LLM para que narre el nuevo slide. Sin un anchor concreto
+        # del slide (número + resumen + summary del block), modelos como
+        # Gemini Flash arrastran contenido del turn anterior y narran el
+        # slide previo OTRA VEZ. Citamos el slide explícitamente y su
+        # resumen para forzar que se cuelgue del DETALLE correcto.
         if self.session is not None:
+            target_block = self.block_for(target)
+            summary = (target_block.summary if target_block else "").strip()
+            anchor = f' ("{summary}")' if summary else ""
             try:
                 self.session.generate_reply(
                     instructions=(
-                        "Narra el contenido del slide actual desde el inicio. "
-                        "No menciones lo que viene después. Cuando termines de "
-                        "cubrir el contenido, llama avanzar_diapositiva."
+                        f"Acabas de cambiar al SLIDE {target}{anchor}. "
+                        f"Narra SU contenido específico desde cero — el material "
+                        f"está en el bloque DETALLE del slide {target} en tus "
+                        f"instrucciones actualizadas. NO repitas contenido de "
+                        f"slides anteriores ni la bienvenida. No menciones lo "
+                        f"que viene después. Cuando termines de cubrir este "
+                        f"slide, llama avanzar_diapositiva."
                     )
                 )
             except Exception as e:
