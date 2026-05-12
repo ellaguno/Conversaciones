@@ -709,18 +709,21 @@ async def entrypoint(ctx: JobContext):
                         continue
 
                     # 3. Hay pending_target. Espera al agente idle, PERO con
-                    # un límite duro: si ya pasaron > 8s desde que se setteó
+                    # un límite duro: si ya pasaron > 3s desde que se setteó
                     # el pending_target, force-commit interrumpiendo al
                     # agente. Sin esto, modelos como Gemini siguen generando
-                    # contenido del slide actual minutos después de llamar
-                    # avanzar_diapositiva y el slide no cambia.
+                    # contenido del slide actual y la pausa entre láminas se
+                    # vuelve muy larga. 3s balancea: deja terminar una frase
+                    # corta naturalmente, pero corta antes de un párrafo
+                    # entero. Combinado con la latencia inicial del nuevo
+                    # generate_reply (~2-3s) la pausa total queda en ~5s.
                     idle = await _wait_idle()
                     pending_age = (
                         time.monotonic() - pres_state.pending_target_set_at
                         if pres_state.pending_target_set_at is not None
                         else 0.0
                     )
-                    force = pending_age > 8.0
+                    force = pending_age > 3.0
                     if not idle and not force:
                         continue
                     if not idle and force:
