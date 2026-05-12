@@ -10,8 +10,10 @@ import { ConversationLogView } from '@/components/app/conversation-log-view';
 import { NotesView } from '@/components/app/notes-view';
 import { TranscribeView } from '@/components/app/transcribe-view';
 import { type TherapyOptions, WelcomeView } from '@/components/app/welcome-view';
+import { PlaticaOverlay } from '@/components/presenter/platica-overlay';
 import type { PersonalityConfig } from '@/lib/personalities-config';
 import { DEFAULT_CONFIGS } from '@/lib/personalities-config';
+import type { PlaticaGuion, PlaticaManifest, PresenterVisualizer } from '@/lib/platica-schema';
 
 const VISION_PERSONALITIES = new Set([
   'asesor_sistemas',
@@ -251,28 +253,43 @@ export function ViewController({
   const [showConversations, setShowConversations] = useState<string | null>(null);
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [showPostSession, setShowPostSession] = useState(false);
-  // Header overrides para modo plática: nombre del presentador + título.
-  const [platicaHeader, setPlaticaHeader] = useState<{ name?: string; title?: string }>({});
+  // Estado del modo plática: además del header (nombre/título) necesitamos
+  // manifest + guion completos para el PlaticaOverlay (audience_mode, speed,
+  // visualizer, slides visibles). Una sola fetch por platicaId.
+  const [platicaData, setPlaticaData] = useState<{
+    manifest?: PlaticaManifest;
+    guion?: PlaticaGuion;
+  }>({});
+  const platicaHeader = {
+    name: platicaData.manifest?.presenter_name || undefined,
+    title: platicaData.manifest?.title || undefined,
+  };
   useEffect(() => {
     if (!platicaId) {
-      setPlaticaHeader({});
+      setPlaticaData({});
       return;
     }
     let cancelled = false;
     fetch(`/api/platicas/${platicaId}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (cancelled || !data?.manifest) return;
-        setPlaticaHeader({
-          name: data.manifest.presenter_name || undefined,
-          title: data.manifest.title || undefined,
-        });
+        if (cancelled || !data?.manifest || !data?.guion) return;
+        setPlaticaData({ manifest: data.manifest, guion: data.guion });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [platicaId]);
+  // Speed local: inicial del manifest, mutado por el slider del PlaticaOverlay.
+  // Solo aplica visualmente; el cambio real al TTS lo hace el overlay vía
+  // data channel.
+  const [audioSpeed, setAudioSpeed] = useState<number>(1.0);
+  useEffect(() => {
+    if (platicaData.manifest?.speed !== undefined) {
+      setAudioSpeed(platicaData.manifest.speed);
+    }
+  }, [platicaData.manifest?.speed]);
 
   // Detect disconnection to reset autoConnect
   useEffect(() => {
@@ -346,57 +363,78 @@ export function ViewController({
   }
 
   return (
-    <AnimatePresence mode="wait">
-      {!isConnected && !autoConnect && (
-        <MotionWelcomeView
-          key="welcome"
-          {...VIEW_MOTION_PROPS}
-          startButtonText={appConfig.startButtonText}
-          selectedPersonality={selectedPersonality}
-          onSelectPersonality={onSelectPersonality}
-          onStartCall={onStartCall}
-          onViewNotes={isGuest ? undefined : () => setShowNotes(true)}
-          onViewConversations={isGuest ? undefined : (p: string) => setShowConversations(p)}
-          onTranscribe={isGuest ? undefined : () => setShowTranscribe(true)}
-          onOpenSettings={isGuest ? undefined : onOpenSettings}
-          onLogout={isGuest ? undefined : onLogout}
-          onAdminPanel={isGuest ? undefined : onAdminPanel}
-          isAdmin={isGuest ? false : isAdmin}
-          initialPatientId={initialPatientId}
-          isGuest={isGuest}
-          adminLayoutDefaults={adminLayoutDefaults}
+    <>
+      <AnimatePresence mode="wait">
+        {!isConnected && !autoConnect && (
+          <MotionWelcomeView
+            key="welcome"
+            {...VIEW_MOTION_PROPS}
+            startButtonText={appConfig.startButtonText}
+            selectedPersonality={selectedPersonality}
+            onSelectPersonality={onSelectPersonality}
+            onStartCall={onStartCall}
+            onViewNotes={isGuest ? undefined : () => setShowNotes(true)}
+            onViewConversations={isGuest ? undefined : (p: string) => setShowConversations(p)}
+            onTranscribe={isGuest ? undefined : () => setShowTranscribe(true)}
+            onOpenSettings={isGuest ? undefined : onOpenSettings}
+            onLogout={isGuest ? undefined : onLogout}
+            onAdminPanel={isGuest ? undefined : onAdminPanel}
+            isAdmin={isGuest ? false : isAdmin}
+            initialPatientId={initialPatientId}
+            isGuest={isGuest}
+            adminLayoutDefaults={adminLayoutDefaults}
+          />
+        )}
+        {isConnected && (
+          <MotionSessionView
+            key="session-view"
+            {...VIEW_MOTION_PROPS}
+            personality={activePersonality}
+            displayName={platicaHeader.name}
+            displaySubtitle={platicaHeader.title}
+            supportsChatInput={appConfig.supportsChatInput}
+            supportsVideoInput={appConfig.supportsVideoInput}
+            supportsScreenShare={
+              appConfig.supportsScreenShare || VISION_PERSONALITIES.has(activePersonality)
+            }
+            isPreConnectBufferEnabled={appConfig.isPreConnectBufferEnabled}
+            audioVisualizerType={
+              // En modo plática el visualizer lo dicta el manifest (mismo que en
+              // modo "Todo en uno"). Fuera de plática, el personality_config.
+              (platicaData.manifest?.presenter_visualizer as PresenterVisualizer | undefined) ||
+              personalityConfig.visualizer ||
+              appConfig.audioVisualizerType
+            }
+            audioVisualizerColor={
+              resolvedTheme === 'dark'
+                ? appConfig.audioVisualizerColorDark
+                : appConfig.audioVisualizerColor
+            }
+            audioVisualizerColorShift={appConfig.audioVisualizerColorShift}
+            audioVisualizerBarCount={appConfig.audioVisualizerBarCount}
+            audioVisualizerGridRowCount={appConfig.audioVisualizerGridRowCount}
+            audioVisualizerGridColumnCount={appConfig.audioVisualizerGridColumnCount}
+            audioVisualizerRadialBarCount={appConfig.audioVisualizerRadialBarCount}
+            audioVisualizerRadialRadius={appConfig.audioVisualizerRadialRadius}
+            audioVisualizerWaveLineWidth={appConfig.audioVisualizerWaveLineWidth}
+            isAdmin={isGuest ? false : isAdmin}
+            className="fixed inset-0"
+          />
+        )}
+      </AnimatePresence>
+      {/* Overlay de plática: controles ▶/◀, ✋, mic auto-mute, Q&A, speed.
+        Vive FUERA del AnimatePresence (no es motion). Solo se monta cuando
+        hay sesión activa con platicaId — el polling interno y los listeners
+        del data channel necesitan al room conectado. */}
+      {isConnected && platicaId && platicaData.manifest && platicaData.guion && (
+        <PlaticaOverlay
+          platicaId={platicaId}
+          manifest={platicaData.manifest}
+          guion={platicaData.guion}
+          audioSpeed={audioSpeed}
+          setAudioSpeed={setAudioSpeed}
         />
       )}
-      {isConnected && (
-        <MotionSessionView
-          key="session-view"
-          {...VIEW_MOTION_PROPS}
-          personality={activePersonality}
-          displayName={platicaHeader.name}
-          displaySubtitle={platicaHeader.title}
-          supportsChatInput={appConfig.supportsChatInput}
-          supportsVideoInput={appConfig.supportsVideoInput}
-          supportsScreenShare={
-            appConfig.supportsScreenShare || VISION_PERSONALITIES.has(activePersonality)
-          }
-          isPreConnectBufferEnabled={appConfig.isPreConnectBufferEnabled}
-          audioVisualizerType={personalityConfig.visualizer || appConfig.audioVisualizerType}
-          audioVisualizerColor={
-            resolvedTheme === 'dark'
-              ? appConfig.audioVisualizerColorDark
-              : appConfig.audioVisualizerColor
-          }
-          audioVisualizerColorShift={appConfig.audioVisualizerColorShift}
-          audioVisualizerBarCount={appConfig.audioVisualizerBarCount}
-          audioVisualizerGridRowCount={appConfig.audioVisualizerGridRowCount}
-          audioVisualizerGridColumnCount={appConfig.audioVisualizerGridColumnCount}
-          audioVisualizerRadialBarCount={appConfig.audioVisualizerRadialBarCount}
-          audioVisualizerRadialRadius={appConfig.audioVisualizerRadialRadius}
-          audioVisualizerWaveLineWidth={appConfig.audioVisualizerWaveLineWidth}
-          isAdmin={isGuest ? false : isAdmin}
-          className="fixed inset-0"
-        />
-      )}
-    </AnimatePresence>
+    </>
   );
 }

@@ -11,9 +11,10 @@
 //     sola pantalla.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ParticipantEvent, RoomEvent, TokenSource } from 'livekit-client';
-import { useLocalParticipant, useSession, useSessionContext } from '@livekit/components-react';
+import { TokenSource } from 'livekit-client';
+import { useSession, useSessionContext } from '@livekit/components-react';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
+import { PlaticaOverlay } from '@/components/presenter/platica-overlay';
 import { PresenterOverlay } from '@/components/presenter/presenter-overlay';
 import type {
   OverlayCorner,
@@ -256,126 +257,6 @@ function LiveProjection({
   // useSessionContext expone `end()` desde el SessionProvider que mete
   // AgentSessionProvider — mismo patrón que AgentDisconnectButton.
   const sessionCtx = useSessionContext();
-  const { localParticipant } = useLocalParticipant();
-
-  // Coreografía del modo "silent": el oyente "levanta la mano" en un slide; al
-  // terminar el slide el agente abre una ventana de Q&A breve (mic on); cuando
-  // detecta silencio cierra y avanza. La mano vive local (single-screen v1) y
-  // se notifica al agente por data channel.
-  const audienceMode = manifest.audience_mode ?? 'open';
-  const [handRaisedSlide, setHandRaisedSlide] = useState<number | null>(null);
-  const [qaWindowOpen, setQaWindowOpen] = useState(false);
-  const [finalQa, setFinalQa] = useState(false);
-
-  // Publica un mensaje JSON en el topic 'control' del data channel — el agente
-  // lo escucha en su handler on('data_received'). Best-effort: si el room no
-  // está conectado, se silencia (los botones siguen reactivos en UI local).
-  const publishControl = useCallback(
-    (payload: object) => {
-      if (!localParticipant) return;
-      try {
-        const data = new TextEncoder().encode(JSON.stringify(payload));
-        void localParticipant.publishData(data, { reliable: true, topic: 'control' });
-      } catch {
-        // noop
-      }
-    },
-    [localParticipant]
-  );
-
-  // Próximo / anterior slide visible (saltando hidden=true). El agente recibe
-  // un número absoluto y enforce ahí sus reglas (floor de dwell, etc.).
-  const visibleSlides = useMemo(
-    () => guion.blocks.filter((b) => !b.hidden).map((b) => b.slide),
-    [guion]
-  );
-  const requestAdvance = useCallback(() => {
-    // ▶ cancela la mano (decisión de diseño) y pide avanzar al agente. El
-    // agente normalmente avanza al siguiente slide visible.
-    setHandRaisedSlide(null);
-    publishControl({ type: 'advance' });
-  }, [publishControl]);
-  const requestPrev = useCallback(() => {
-    setHandRaisedSlide(null);
-    const cur = projection.currentSlide;
-    let target: number | null = null;
-    for (let i = visibleSlides.length - 1; i >= 0; i--) {
-      if (visibleSlides[i] < cur) {
-        target = visibleSlides[i];
-        break;
-      }
-    }
-    if (target !== null) publishControl({ type: 'goto', slide: target });
-  }, [publishControl, projection.currentSlide, visibleSlides]);
-  const requestRaiseHand = useCallback(() => {
-    setHandRaisedSlide(projection.currentSlide);
-    publishControl({ type: 'hand_raised', slide: projection.currentSlide });
-  }, [publishControl, projection.currentSlide]);
-
-  // Escucha eventos del agente: qa_window_start/end avisan que el agente abrió
-  // o cerró la ventana de preguntas al terminar un slide; final_qa_start
-  // significa que llegó al último slide (Q&A general abierta).
-  useEffect(() => {
-    const room = sessionCtx?.room;
-    if (!room) return;
-    const handler = (payload: Uint8Array) => {
-      // El agente publica sin topic (state.publish); las otras presentaciones
-      // listening en la misma room son privadas a su componente, así que
-      // procesamos cualquier payload y filtramos por .type abajo.
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(payload)) as { type?: string };
-        if (msg.type === 'qa_window_start') setQaWindowOpen(true);
-        else if (msg.type === 'qa_window_end') {
-          setQaWindowOpen(false);
-          setHandRaisedSlide(null);
-        } else if (msg.type === 'final_qa_start') {
-          setFinalQa(true);
-          setQaWindowOpen(true);
-        }
-      } catch {
-        // not for us
-      }
-    };
-    room.on(RoomEvent.DataReceived, handler);
-    return () => {
-      room.off(RoomEvent.DataReceived, handler);
-    };
-  }, [sessionCtx?.room]);
-
-  // Cuando cambia el slide y la mano estaba levantada en uno anterior, limpiar.
-  // (El agente ya la borró al abrir/cerrar Q&A; esto es para que el ícono no
-  // quede colgado si la mano se levantó después y nunca hubo Q&A.)
-  useEffect(() => {
-    if (handRaisedSlide !== null && handRaisedSlide !== projection.currentSlide) {
-      setHandRaisedSlide(null);
-    }
-  }, [projection.currentSlide, handRaisedSlide]);
-
-  // Mic auto-state en silent mode. El problema: LiveKit publica el mic track
-  // automáticamente cuando la sesión arranca, así que setMicrophoneEnabled(false)
-  // llamado al mount puede ganar la carrera y luego el track aparece encendido.
-  // Solución: escuchar LocalTrackPublished y TrackUnmuted para re-enforcer cada
-  // vez que el estado diverge del deseado.
-  useEffect(() => {
-    if (audienceMode !== 'silent') return;
-    if (!localParticipant) return;
-    const shouldUnmute = qaWindowOpen || finalQa;
-    const enforce = () => {
-      const currentlyEnabled = !!localParticipant.isMicrophoneEnabled;
-      if (currentlyEnabled !== shouldUnmute) {
-        void localParticipant.setMicrophoneEnabled(shouldUnmute);
-      }
-    };
-    enforce();
-    // Re-enforcer SOLO en LocalTrackPublished — eso es el auto-publish del mic
-    // al conectar la sesión. NO escuchamos TrackUnmuted porque el usuario sí
-    // puede unmutearse manualmente desde el botón 🎤 para interrumpir (esa es
-    // la intención del diseño en silent mode).
-    localParticipant.on(ParticipantEvent.LocalTrackPublished, enforce);
-    return () => {
-      localParticipant.off(ParticipantEvent.LocalTrackPublished, enforce);
-    };
-  }, [audienceMode, qaWindowOpen, finalQa, localParticipant]);
 
   // Flujo de salida: en vez de navegar de vuelta directo, ofrecemos enviar
   // la transcripción al correo del usuario. El agente la deja escrita en
@@ -436,19 +317,15 @@ function LiveProjection({
         corner={(manifest.presenter_overlay_corner as OverlayCorner) ?? 'top-right'}
         visualizer={(manifest.presenter_visualizer as PresenterVisualizer) ?? 'aura'}
       />
-      <BottomControls
+      <PlaticaOverlay
+        platicaId={id}
+        manifest={manifest}
+        guion={guion}
+        audioSpeed={audioSpeed}
+        setAudioSpeed={setAudioSpeed}
+        currentSlide={projection.currentSlide}
         onLeave={handleLeave}
-        onPrev={requestPrev}
-        onNext={requestAdvance}
-        onRaiseHand={requestRaiseHand}
-        speed={audioSpeed}
-        onSpeedChange={setAudioSpeed}
-        audienceMode={audienceMode}
-        handRaised={handRaisedSlide === projection.currentSlide}
-        qaOpen={qaWindowOpen}
       />
-      {handRaisedSlide === projection.currentSlide && !qaWindowOpen && <HandRaisedOverlay />}
-      {qaWindowOpen && <QaWindowBadge isFinal={finalQa} />}
       {leaveStage !== 'live' && (
         <LeaveTranscriptDialog
           stage={leaveStage}
@@ -461,49 +338,6 @@ function LiveProjection({
         />
       )}
     </>
-  );
-}
-
-// ─── Indicadores visuales del modo silent ────────────────────────────────
-// Mano grande semi-transparente para que el oyente vea que su intención de
-// preguntar quedó registrada. Vive en una esquina opuesta al PresenterOverlay
-// para no chocar con el visualizador del agente.
-function HandRaisedOverlay() {
-  return (
-    <div
-      className="pointer-events-none fixed right-6 bottom-20 z-30 text-7xl drop-shadow-lg select-none"
-      style={{ animation: 'hand-wave 1.6s ease-in-out infinite' }}
-      aria-label="Mano levantada"
-      role="img"
-    >
-      ✋
-      <style jsx>{`
-        @keyframes hand-wave {
-          0%,
-          100% {
-            transform: rotate(-8deg);
-            opacity: 0.7;
-          }
-          50% {
-            transform: rotate(8deg);
-            opacity: 0.95;
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// Pill arriba al centro mientras la ventana de Q&A está activa. Da feedback
-// claro de "ahora puedes hablar" para el oyente; cambia copy en final Q&A.
-function QaWindowBadge({ isFinal }: { isFinal: boolean }) {
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center">
-      <div className="flex items-center gap-2 rounded-full bg-emerald-500/90 px-4 py-1.5 text-sm font-medium text-white shadow-lg">
-        <span className="text-base">🎤</span>
-        {isFinal ? 'Q&A abierta — haz tu pregunta' : 'Ventana de preguntas — habla ahora'}
-      </div>
-    </div>
   );
 }
 
@@ -786,171 +620,6 @@ function ProjectionView({
         />
       </div>
       <SlideTransitionStyles />
-    </div>
-  );
-}
-
-// ─── BottomControls (solo en modo live) ──────────────────────────────────
-// Auto-hide a los 3s sin movimiento. Movimiento del mouse o tap los revive.
-function BottomControls({
-  onLeave,
-  onPrev,
-  onNext,
-  onRaiseHand,
-  speed,
-  onSpeedChange,
-  audienceMode,
-  handRaised,
-  qaOpen,
-}: {
-  onLeave: () => void;
-  onPrev: () => void;
-  onNext: () => void;
-  onRaiseHand: () => void;
-  speed: number;
-  onSpeedChange: (v: number) => void;
-  audienceMode: 'open' | 'silent';
-  handRaised: boolean;
-  qaOpen: boolean;
-}) {
-  const [visible, setVisible] = useState(true);
-  // useLocalParticipant expone isMicrophoneEnabled como booleano reactivo —
-  // leerlo de localParticipant directamente da el snapshot, no re-renderea
-  // cuando cambia el mute. Esto hace que el ícono 🎤/🔇 refleje el estado real.
-  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
-  const micEnabled = isMicrophoneEnabled;
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const reset = () => {
-      setVisible(true);
-      clearTimeout(timer);
-      timer = setTimeout(() => setVisible(false), 3000);
-    };
-    reset();
-    window.addEventListener('mousemove', reset);
-    window.addEventListener('touchstart', reset);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('mousemove', reset);
-      window.removeEventListener('touchstart', reset);
-    };
-  }, []);
-
-  // Cuando el usuario arrastra el slider de velocidad, evita inundar el data
-  // channel con cada onChange (que dispara por cada paso del slider). Se manda
-  // un solo mensaje 150ms después del último cambio — efecto perceptible
-  // como "casi inmediato" sin saturar al agente con interrupciones.
-  const speedSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sendSpeed = useCallback(
-    (value: number) => {
-      onSpeedChange(value);
-      if (!localParticipant) return;
-      if (speedSendTimer.current) clearTimeout(speedSendTimer.current);
-      speedSendTimer.current = setTimeout(() => {
-        try {
-          const payload = new TextEncoder().encode(JSON.stringify({ type: 'speed', value }));
-          // reliable: true para que el cambio no se pierda en jitter de red.
-          // topic 'control' permite al agente filtrar fácil.
-          void localParticipant.publishData(payload, { reliable: true, topic: 'control' });
-        } catch {
-          // best-effort — si el room aún no está conectado, el slider seguirá
-          // funcionando localmente y el próximo arrastre re-intenta.
-        }
-      }, 150);
-    },
-    [localParticipant, onSpeedChange]
-  );
-
-  return (
-    <div
-      className={`fixed inset-x-0 bottom-3 z-40 flex justify-center transition-opacity duration-300 ${
-        visible ? 'opacity-100' : 'pointer-events-none opacity-0'
-      }`}
-    >
-      <div className="flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1.5 text-white shadow-lg ring-1 ring-white/10 backdrop-blur-md">
-        <button
-          type="button"
-          onClick={onPrev}
-          title="Slide anterior"
-          aria-label="Slide anterior"
-          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          title="Slide siguiente"
-          aria-label="Slide siguiente"
-          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
-        >
-          ▶
-        </button>
-        <div className="mx-1 h-4 w-px bg-white/20" />
-        <button
-          type="button"
-          onClick={() => localParticipant?.setMicrophoneEnabled(!micEnabled)}
-          title={micEnabled ? 'Mutear micrófono' : 'Activar micrófono'}
-          aria-label="Mute mic"
-          className="rounded-full px-2.5 py-1 text-sm hover:bg-white/10"
-        >
-          {micEnabled ? '🎤' : '🔇'}
-        </button>
-        {audienceMode === 'silent' && (
-          <>
-            <div className="mx-1 h-4 w-px bg-white/20" />
-            <button
-              type="button"
-              onClick={onRaiseHand}
-              disabled={handRaised || qaOpen}
-              title={
-                qaOpen
-                  ? 'Q&A abierta — habla ahora'
-                  : handRaised
-                    ? 'Mano levantada — esperando fin de lámina'
-                    : 'Levantar la mano para preguntar al final de esta lámina'
-              }
-              aria-label="Levantar la mano"
-              className={`rounded-full px-2.5 py-1 text-sm transition ${
-                handRaised || qaOpen ? 'bg-amber-500/30 text-amber-200' : 'hover:bg-white/10'
-              } disabled:cursor-default`}
-            >
-              ✋
-            </button>
-          </>
-        )}
-        <div className="mx-1 h-4 w-px bg-white/20" />
-        <div
-          className="flex items-center gap-1.5 px-1.5"
-          title="Velocidad del orador"
-          aria-label="Velocidad del orador"
-        >
-          <span className="text-xs">⏱</span>
-          <input
-            type="range"
-            min={0.6}
-            max={2.0}
-            step={0.05}
-            value={speed}
-            onChange={(e) => sendSpeed(parseFloat(e.target.value))}
-            className="h-1 w-20 cursor-pointer accent-amber-500"
-          />
-          <span className="font-mono text-[10px] text-white/60 tabular-nums">
-            {speed.toFixed(2)}x
-          </span>
-        </div>
-        <div className="mx-1 h-4 w-px bg-white/20" />
-        <button
-          type="button"
-          onClick={onLeave}
-          title="Salir de la plática"
-          aria-label="Salir"
-          className="rounded-full px-2.5 py-1 text-sm hover:bg-red-500/40"
-        >
-          ✕
-        </button>
-      </div>
     </div>
   );
 }
