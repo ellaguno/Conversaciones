@@ -467,7 +467,7 @@ async def entrypoint(ctx: JobContext):
             if target is None:
                 logger.info("client advance ignorado: último slide visible")
                 return
-            pres_state.pending_target = target
+            pres_state.set_pending_target(target)
             logger.info(f"client advance: pending {target}")
         elif msg_type == "goto":
             try:
@@ -475,7 +475,7 @@ async def entrypoint(ctx: JobContext):
             except (KeyError, TypeError, ValueError):
                 return
             if 1 <= target <= pres_state.platica.manifest.slide_count:
-                pres_state.pending_target = target
+                pres_state.set_pending_target(target)
                 logger.info(f"client goto: pending {target}")
 
     # Transcript capture for all personalities
@@ -708,9 +708,31 @@ async def entrypoint(ctx: JobContext):
                     if pres_state.pending_target is None:
                         continue
 
-                    # 3. Hay pending_target: esperar a que el agente esté idle.
-                    if not await _wait_idle():
+                    # 3. Hay pending_target. Espera al agente idle, PERO con
+                    # un límite duro: si ya pasaron > 8s desde que se setteó
+                    # el pending_target, force-commit interrumpiendo al
+                    # agente. Sin esto, modelos como Gemini siguen generando
+                    # contenido del slide actual minutos después de llamar
+                    # avanzar_diapositiva y el slide no cambia.
+                    idle = await _wait_idle()
+                    pending_age = (
+                        time.monotonic() - pres_state.pending_target_set_at
+                        if pres_state.pending_target_set_at is not None
+                        else 0.0
+                    )
+                    force = pending_age > 8.0
+                    if not idle and not force:
                         continue
+                    if not idle and force:
+                        logger.warning(
+                            f"FORCE-COMMIT: pending_target={pres_state.pending_target} "
+                            f"hace {pending_age:.1f}s y el agente sigue hablando — "
+                            "interrumpiendo para commit"
+                        )
+                        try:
+                            session.interrupt(force=True)
+                        except Exception as e:
+                            logger.warning(f"interrupt fallo: {e}")
 
                     # 4. Q&A primero si aplica (mano levantada en slide actual + silent).
                     if (

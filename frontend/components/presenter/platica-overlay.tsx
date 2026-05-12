@@ -93,6 +93,27 @@ export function PlaticaOverlay({
     publishControl({ type: 'hand_raised', slide: currentSlide });
   }, [publishControl, currentSlide]);
 
+  // Keyboard nav: flechas + espacio publican advance/goto al agente. Esto
+  // sustituye al keyboard handler que estaba en useProjection (purely local,
+  // se peleaba con el polling). Ahora teclado y botones convergen al mismo
+  // path → el agente es la única fuente de verdad.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ignora si el foco está en un input/textarea (no robar teclas del usuario).
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        requestAdvance();
+        e.preventDefault();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        requestPrev();
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [requestAdvance, requestPrev]);
+
   // Eventos del agente.
   useEffect(() => {
     const room = sessionCtx?.room;

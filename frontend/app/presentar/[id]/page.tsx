@@ -539,27 +539,11 @@ function useProjection(id: string, manifest: PlaticaManifest, guion: PlaticaGuio
     });
   }, [visible]);
 
-  // Keyboard nav (también en live mode — útil como override del operador).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        navigateNext();
-        e.preventDefault();
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        navigatePrev();
-        e.preventDefault();
-      } else if (e.key === 'Home') {
-        if (visible[0]) setCurrentSlide(visible[0]);
-        e.preventDefault();
-      } else if (e.key === 'End') {
-        const last = visible[visible.length - 1];
-        if (last) setCurrentSlide(last);
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [visible, navigateNext, navigatePrev]);
+  // Keyboard nav DESHABILITADO en useProjection — antes mutaba currentSlide
+  // local, pero como el polling reescribe el state del agente cada 500ms el
+  // efecto era "presionas → cambia → polling regresa". En live mode el
+  // PlaticaOverlay registra su propio handler que sí publica al agente
+  // (mismo path que los botones), garantizando consistencia entre UI y agente.
 
   return { currentSlide, prevSlide, navigateNext, navigatePrev };
 }

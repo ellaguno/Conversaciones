@@ -1,6 +1,6 @@
 [project]
 name = "agent"
-version = "1.5.3"
+version = "1.5.4"
 requires-python = ">=3.12"
 dependencies = [
     "livekit-agents>=1.4.4",

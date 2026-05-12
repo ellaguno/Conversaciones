@@ -94,6 +94,10 @@ class PresentationState:
         self.current_slide: int = 1
         self.slide_entered_at: float = time.monotonic()
         self.pending_target: int | None = None
+        # Timestamp del cambio más reciente de pending_target. El conductor lo
+        # usa para force-commit si el agente se queda hablando más de lo
+        # razonable después de que el LLM (o el cliente) pidió avanzar.
+        self.pending_target_set_at: float | None = None
         self.pending_hand_at: int | None = None
         self.qa_active: bool = False
         self.final_qa_emitted: bool = False
@@ -197,6 +201,13 @@ class PresentationState:
     # SOLO el conductor (agent.py) llama esto. NUNCA llamarlo desde el LLM
     # ni desde el data handler — esos solo setean pending_target.
 
+    def set_pending_target(self, target: int) -> None:
+        """Setter centralizado para pending_target — siempre actualiza el
+        timestamp. Usar este método (no `state.pending_target = X`) para que
+        el conductor sepa cuándo aplicar el force-commit timeout."""
+        self.pending_target = target
+        self.pending_target_set_at = time.monotonic()
+
     async def do_transition(self, target: int) -> None:
         """Cambia el slide visible, refresca instructions, y dispara un nuevo
         turn del LLM para que narre el contenido nuevo desde cero."""
@@ -207,6 +218,7 @@ class PresentationState:
         self.current_slide = target
         self.slide_entered_at = time.monotonic()
         self.pending_target = None
+        self.pending_target_set_at = None
         self.pending_hand_at = None  # nuevo slide, mano se borra
         self.final_qa_emitted = False  # reset del latch
         logger.info(f"do_transition: slide {previous} → {target}")
@@ -282,7 +294,7 @@ def create_presentation_tools(state: PresentationState) -> list[llm.FunctionTool
                 f"contenido necesita cubrirse con calma. Sigue narrando al "
                 f"menos {remaining} segundos más antes de avanzar."
             )
-        state.pending_target = next_vis
+        state.set_pending_target(next_vis)
         logger.info(
             f"avanzar_diapositiva: pending {state.current_slide} → {next_vis} "
             f"(motivo: {motivo or 'n/a'})"
