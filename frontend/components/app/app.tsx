@@ -273,8 +273,10 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const router = useRouter();
   const isLoggedIn = !!authSession?.user;
   const isAdmin = (authSession?.user as { role?: string } | undefined)?.role === 'admin';
-  const [selectedPersonality, setSelectedPersonality] = useState(initialPersonality || 'trader');
-  const [activePersonality, setActivePersonality] = useState(initialPersonality || 'trader');
+  // Default global = 'normal' (Personaje famoso → Alguien Normal). Para usuarios
+  // logueados, lo sobrescribimos abajo con lastPersonality de /api/preferences.
+  const [selectedPersonality, setSelectedPersonality] = useState(initialPersonality || 'normal');
+  const [activePersonality, setActivePersonality] = useState(initialPersonality || 'normal');
   const [activePatientId, setActivePatientId] = useState('');
   const [sessionId, setSessionId] = useState(0);
   const [autoConnect, setAutoConnect] = useState(false);
@@ -320,6 +322,26 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
 
   const isGuest = !isLoggedIn && guestConfig?.guestEnabled === true;
 
+  // Para usuarios logueados, traer el último agente con el que hablaron y
+  // usarlo como default. Si la URL trae ?personality= explícito, esa gana
+  // sobre la preferencia (deep links siguen funcionando). Guests se quedan
+  // con el default global de arriba.
+  useEffect(() => {
+    if (!isLoggedIn || initialPersonality) return;
+    fetch('/api/preferences', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const last = data?.lastPersonality;
+        if (typeof last === 'string' && last) {
+          setSelectedPersonality(last);
+          setActivePersonality(last);
+        }
+      })
+      .catch(() => {
+        // best-effort: si falla, queda el default
+      });
+  }, [isLoggedIn, initialPersonality]);
+
   // If not logged in, not guest, and auth is resolved → redirect to login
   useEffect(() => {
     if (authStatus === 'loading') return;
@@ -338,8 +360,20 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       setActivePlaticaId(therapy?.platicaId || '');
       setAutoConnect(true);
       setSessionId((prev) => prev + 1);
+      // Guardar como "último agente" para el próximo login (solo logueados).
+      // Fire-and-forget — si falla, no rompe la sesión.
+      if (isLoggedIn) {
+        fetch('/api/preferences', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastPersonality: personality }),
+        }).catch(() => {
+          /* noop */
+        });
+      }
     },
-    []
+    [isLoggedIn]
   );
 
   const handleDisconnected = useCallback(() => {

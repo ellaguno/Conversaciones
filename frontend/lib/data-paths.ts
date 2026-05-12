@@ -31,6 +31,10 @@ export function getUserMetricsFile(userId: string): string {
   return join(getUserDataDir(userId), 'metrics.json');
 }
 
+export function getUserPreferencesFile(userId: string): string {
+  return join(getUserDataDir(userId), 'preferences.json');
+}
+
 export function ensureUserDirs(userId: string): void {
   const dirs = [
     getUserDataDir(userId),

@@ -119,17 +119,17 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    let rawPersonality = body?.personality || 'trader';
+    let rawPersonality = body?.personality || 'normal';
 
     // Guests cannot use psicologo (requires session management)
     if (isGuest && rawPersonality === 'psicologo') {
-      rawPersonality = 'trader';
+      rawPersonality = 'normal';
     }
     // Accept known personalities or custom_* keys
     const isCustom =
       typeof rawPersonality === 'string' && /^custom_[a-z0-9_-]+$/.test(rawPersonality);
     const personality =
-      VALID_PERSONALITIES.has(rawPersonality) || isCustom ? rawPersonality : 'trader';
+      VALID_PERSONALITIES.has(rawPersonality) || isCustom ? rawPersonality : 'normal';
     const rawPatientId = body?.patientId || '';
     const patientId = rawPatientId.replace(/[^a-zA-Z0-9_-]/g, '');
     const voiceId = body?.voiceId || '';
