@@ -248,6 +248,15 @@ class PresentationState:
         # Gemini Flash arrastran contenido del turn anterior y narran el
         # slide previo OTRA VEZ. Citamos el slide explícitamente y su
         # resumen para forzar que se cuelgue del DETALLE correcto.
+        #
+        # Importante: el truncate(max_items=1) anterior borró el historial,
+        # así que el LLM no "recuerda" haber saludado al inicio. Si aquí le
+        # decimos "narra desde cero", modelos chicos arrancan con "hola,
+        # bienvenidos…" porque las negaciones ("NO saludes") no son confiables.
+        # Por eso usamos framing positivo: "continúas la plática en curso",
+        # "el saludo ya ocurrió", y el system prompt actualizado también
+        # incluye una línea de fase que refuerza esto (ver _PHASE_RULE_CONTINUE
+        # en platica_loader).
         if self.session is not None:
             target_block = self.block_for(target)
             summary = (target_block.summary if target_block else "").strip()
@@ -255,13 +264,15 @@ class PresentationState:
             try:
                 self.session.generate_reply(
                     instructions=(
-                        f"Acabas de cambiar al SLIDE {target}{anchor}. "
-                        f"Narra SU contenido específico desde cero — el material "
-                        f"está en el bloque DETALLE del slide {target} en tus "
-                        f"instrucciones actualizadas. NO repitas contenido de "
-                        f"slides anteriores ni la bienvenida. No menciones lo "
-                        f"que viene después. Cuando termines de cubrir este "
-                        f"slide, llama avanzar_diapositiva."
+                        f"Continúas la plática en curso. Acabas de pasar al "
+                        f"SLIDE {target}{anchor}. Ya saludaste y te presentaste "
+                        f"al inicio de la plática, así que entra DIRECTO al "
+                        f"contenido del slide {target} — sin saludar, sin decir "
+                        f"'hola', sin dar bienvenida, sin presentarte otra vez. "
+                        f"El material está en el bloque DETALLE del slide "
+                        f"{target} en tus instrucciones actualizadas. No "
+                        f"menciones lo que viene después. Cuando termines de "
+                        f"cubrir este slide, llama avanzar_diapositiva."
                     )
                 )
             except Exception as e:

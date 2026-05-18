@@ -149,12 +149,12 @@ def load_platica(platica_id: str, data_dir: Path) -> Platica | None:
 # tienden a verbalizar instrucciones largas en primera persona, así que
 # mantenemos la sección OPERACIÓN corta y genérica.
 
-_OPERATION_BLOCK = """[OPERACIÓN — metadata del sistema, NO se dice en voz alta]
+_OPERATION_BLOCK_BASE = """[OPERACIÓN — metadata del sistema, NO se dice en voz alta]
 Eres el presentador en vivo de una plática frente a audiencia. Tu única salida hablada
 viene del bloque DETALLE del slide actual, parafraseado en tu propia voz, en español natural.
 
 Reglas operacionales:
-• Tu primer turno narra el slide 1. NO llames avanzar_diapositiva en ese turno.
+{phase_rule}
 • Cuando termines de cubrir TODO el contenido del slide actual, llamas
   avanzar_diapositiva() (sin parámetros). El sistema cambia el slide
   automáticamente cuando termines tu frase. NO digas nada después de llamarla
@@ -190,6 +190,34 @@ Prohibiciones absolutas (verificar antes de cada turno):
 • NO inventes referencias a slides fuera de tu ventana de DETALLE.
 [FIN OPERACIÓN]
 """
+
+# Línea de "fase" inyectada en _OPERATION_BLOCK según el slide actual.
+# Slide 1: es la apertura, el LLM saluda y se presenta brevemente.
+# Slide N>1: la plática ya está en curso; el saludo y bienvenida YA ocurrieron
+# y NO deben repetirse. Sin esto, después de truncar chat_ctx en cada cambio
+# de slide, el LLM ve un contexto "fresco" y arranca cada slide con un
+# saludo nuevo ("hola, bienvenidos…") porque modelos chicos no respetan
+# negaciones ("NO la bienvenida") de forma confiable.
+_PHASE_RULE_FIRST = (
+    "• Es tu primer turno y estás en el slide 1 (apertura). Abres con un "
+    "saludo cálido y breve, te presentas, y entras al tema del slide. NO "
+    "llames avanzar_diapositiva en este primer turno."
+)
+_PHASE_RULE_CONTINUE = (
+    "• La plática ya está en curso (vas en el slide {slide}). Ya saludaste a "
+    "la audiencia y te presentaste al inicio — NO vuelvas a saludar, NO digas "
+    "'hola', NO des bienvenida, NO te presentes otra vez. Entras DIRECTO al "
+    "contenido del slide actual, como continuación natural del slide anterior."
+)
+
+
+def _operation_block_for(current_slide: int) -> str:
+    """Operation block con la regla de fase correcta para el slide actual."""
+    if current_slide <= 1:
+        phase = _PHASE_RULE_FIRST
+    else:
+        phase = _PHASE_RULE_CONTINUE.format(slide=current_slide)
+    return _OPERATION_BLOCK_BASE.format(phase_rule=phase)
 
 _ADVANCE_RULES = {
     "auto": (
@@ -227,13 +255,13 @@ _AUDIENCE_SILENT_RULE = (
 )
 
 
-# Combined for build_base_block.
-_BASE_RULES = _OPERATION_BLOCK
-
-
-def _narrative_rules_for(advance_mode: str, audience_mode: str = "open") -> str:
+def _narrative_rules_for(
+    advance_mode: str,
+    audience_mode: str = "open",
+    current_slide: int = 1,
+) -> str:
     rule = _ADVANCE_RULES.get(advance_mode, _ADVANCE_RULES["hybrid"])
-    parts = [_BASE_RULES, rule]
+    parts = [_operation_block_for(current_slide), rule]
     if audience_mode == "silent":
         parts.append(_AUDIENCE_SILENT_RULE)
     return "\n".join(parts)
@@ -251,9 +279,11 @@ _OVERRIDE_NOTICE = (
 )
 
 
-def build_base_block(platica: Platica) -> str:
-    """Static block: audience, tone, glossary, story arcs, narrative rules.
-    Doesn't change as the talk progresses."""
+def build_base_block(platica: Platica, current_slide: int = 1) -> str:
+    """Audience, tone, glossary, story arcs, narrative rules.
+    Mostly static, salvo la línea de "fase" del operation block que cambia
+    entre slide 1 (apertura, saluda) y slides posteriores (continuación, NO
+    saluda) — ver `_phase_rule_for`."""
     lines = [_OVERRIDE_NOTICE, "", "--- CONTEXTO DE LA PLÁTICA ---"]
     lines.append(f"Título: {platica.manifest.title}")
     lines.append(f"Audiencia: {platica.manifest.audience_profile}")
@@ -277,7 +307,13 @@ def build_base_block(platica: Platica) -> str:
             + ", ".join(str(s) for s in platica.manifest.key_moments)
         )
     lines.append("")
-    lines.append(_narrative_rules_for(platica.manifest.advance_mode, platica.manifest.audience_mode))
+    lines.append(
+        _narrative_rules_for(
+            platica.manifest.advance_mode,
+            platica.manifest.audience_mode,
+            current_slide=current_slide,
+        )
+    )
     return "\n".join(lines)
 
 
@@ -361,7 +397,7 @@ def build_full_instructions(
     return (
         base_personality_prompt.rstrip()
         + "\n\n"
-        + build_base_block(platica)
+        + build_base_block(platica, current_slide=current_slide)
         + "\n\n"
         + build_index_block(platica)
         + "\n\n"
