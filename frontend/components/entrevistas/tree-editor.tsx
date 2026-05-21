@@ -6,6 +6,9 @@ export interface TreeNode {
   id: string;
   titulo: string;
   estado: 'pendiente' | 'en_progreso' | 'cubierto' | 'profundizar' | 'saltado' | string;
+  // true → state was fixed by the human via this editor; the post-session
+  // analysis and the chars-based heuristic both leave it alone.
+  estado_manual?: boolean;
   preguntas_clave?: string[];
   resumen?: string;
   razon_profundizar?: string;
@@ -167,7 +170,7 @@ function NodeView({
         )}
         <select
           value={node.estado}
-          onChange={(e) => onUpdate(node.id, { estado: e.target.value })}
+          onChange={(e) => onUpdate(node.id, { estado: e.target.value, estado_manual: true })}
           className={`rounded px-2 py-0.5 text-xs font-medium ${STATE_COLOR[node.estado] || ''}`}
         >
           {STATES.map((s) => (
@@ -176,6 +179,22 @@ function NodeView({
             </option>
           ))}
         </select>
+        {node.estado_manual ? (
+          <button
+            onClick={() => onUpdate(node.id, { estado_manual: false })}
+            title="Estado fijado a mano — clic para liberar (el sistema retomará control automático según contenido)"
+            className="text-xs text-amber-600 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-100"
+          >
+            🔒
+          </button>
+        ) : (
+          <span
+            title="Estado automático — se actualiza según el contenido y el análisis post-sesión"
+            className="text-[10px] text-zinc-400"
+          >
+            ⚙
+          </span>
+        )}
         <button
           onClick={() => onAddChild(node.id)}
           className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"

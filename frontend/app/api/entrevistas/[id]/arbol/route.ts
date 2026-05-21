@@ -13,6 +13,7 @@ interface TreeNode {
   id: string;
   titulo: string;
   estado: string;
+  estado_manual?: boolean;
   preguntas_clave?: string[];
   resumen?: string;
   razon_profundizar?: string;
@@ -58,6 +59,7 @@ function ensureNodeShape(n: TreeNode): TreeNode {
     id: n.id,
     titulo: n.titulo || '',
     estado: n.estado || 'pendiente',
+    estado_manual: n.estado_manual === true ? true : undefined,
     preguntas_clave: Array.isArray(n.preguntas_clave)
       ? n.preguntas_clave.filter((x): x is string => typeof x === 'string').slice(0, 20)
       : [],

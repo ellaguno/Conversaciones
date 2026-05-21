@@ -39,7 +39,8 @@ def create_interview_tools(manager: InterviewManager,
             return f"No existe un nodo con id '{id}'."
         parts = [
             f"# {node.get('titulo', '')} [{id}]",
-            f"Estado: {node.get('estado', 'pendiente')}",
+            f"Estado: {node.get('estado', 'pendiente')}"
+            + (" (fijado por humano)" if node.get("estado_manual") else ""),
         ]
         preguntas = node.get("preguntas_clave") or []
         if preguntas:
@@ -92,12 +93,21 @@ def create_interview_tools(manager: InterviewManager,
 
     # ----- mutators (Elena takes live notes) ----------------------------------
 
+    def _is_locked(node: dict) -> bool:
+        # Nodes the human set via the UI have estado_manual: true and must not
+        # be overridden by Elena's in-session tool calls.
+        return bool(node.get("estado_manual"))
+
     @llm.function_tool()
     async def marcar_nodo_cubierto(id: str) -> str:
         """Marca un nodo como cubierto cuando sientas que ya extrajiste lo importante de ese tema."""
         node = manager.find_node(id)
         if node is None:
             return f"No existe el nodo '{id}'."
+        if _is_locked(node):
+            return (f"Nodo '{id}' tiene estado fijado por el humano "
+                    f"({node.get('estado')}). No lo cambio; sigo conversando "
+                    "y registro la sesión.")
         manager.update_node(id, estado="cubierto")
         manager.mark_session_touched(id, current_session_num)
         return f"Nodo '{id}' marcado como cubierto."
@@ -108,6 +118,9 @@ def create_interview_tools(manager: InterviewManager,
         node = manager.find_node(id)
         if node is None:
             return f"No existe el nodo '{id}'."
+        if _is_locked(node):
+            return (f"Nodo '{id}' tiene estado fijado por el humano "
+                    f"({node.get('estado')}). No lo cambio.")
         manager.update_node(id, estado="en_progreso")
         manager.mark_session_touched(id, current_session_num)
         return f"Nodo '{id}' marcado como en progreso."
@@ -118,6 +131,9 @@ def create_interview_tools(manager: InterviewManager,
         node = manager.find_node(id)
         if node is None:
             return f"No existe el nodo '{id}'."
+        if _is_locked(node):
+            return (f"Nodo '{id}' tiene estado fijado por el humano "
+                    f"({node.get('estado')}). No lo cambio.")
         manager.update_node(id, estado="profundizar", razon_profundizar=motivo)
         return f"Nodo '{id}' marcado para profundizar. Motivo: {motivo}"
 

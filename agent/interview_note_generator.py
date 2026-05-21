@@ -198,7 +198,16 @@ async def generate_session_notes(
 
     if updated_tree is not None:
         updated_tree["modo"] = mode
+        # Preserve any human-locked states before saving — the LLM may have
+        # tried to overwrite them despite the prompt instruction.
+        updated_tree = manager.merge_preserving_manual_states(updated_tree)
         manager.save_tree(updated_tree)
+
+    # Post-LLM heuristic: promote non-manual nodes whose knowledge file has
+    # accumulated content. Cheap (no LLM call), idempotent.
+    promoted = manager.apply_state_heuristic()
+    if promoted:
+        logger.info(f"[entrevista] heurística promovió {promoted} nodos (manual override respetado)")
 
     # Phase 3: three remaining calls in parallel — they read the persisted tree/notes.
     new_tree_view = manager.tree_compact_view()
@@ -364,13 +373,18 @@ async def _update_tree(transcript: str, current_tree_json: str,
             "Recibes el árbol actual y la transcripción de la última sesión. "
             "Devuelves el árbol completo actualizado con las siguientes reglas:\n"
             "- Mantén ids estables — NUNCA cambies el id de un nodo existente.\n"
-            "- Actualiza 'estado' de los nodos tocados: 'cubierto' si quedó "
+            "- NUNCA cambies 'estado' ni 'razon_profundizar' de un nodo que "
+            "  tenga 'estado_manual': true. Ese estado fue fijado a mano por "
+            "  el humano y debe preservarse tal cual. Conserva el campo "
+            "  'estado_manual': true en la salida.\n"
+            "- Para los demás nodos, actualiza 'estado': 'cubierto' si quedó "
             "  satisfactoriamente trabajado, 'en_progreso' si quedó a medias, "
             "  'profundizar' si surgió algo que vale la pena retomar.\n"
             "- Si un nodo quedó marcado 'profundizar', llena 'razon_profundizar'.\n"
             "- Si surgieron temas nuevos no anticipados, agrégalos como hijos "
             "  bajo el nodo padre más natural. Asigna ids como "
-            "  parent_id + '.' + (count+1).\n"
+            "  parent_id + '.' + (count+1). Los nodos nuevos NO llevan "
+            "  'estado_manual'.\n"
             "- Agrega session_num a 'sesiones' de cada nodo tocado.\n"
             "- Refresca 'resumen' breve (1-3 líneas) en cada nodo tocado con "
             "  lo que ahora sabemos sobre él."

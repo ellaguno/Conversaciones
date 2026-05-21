@@ -41,6 +41,11 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 
 VALID_STATES = {"pendiente", "en_progreso", "cubierto", "profundizar", "saltado"}
 
+# Heuristic threshold (in characters of the destilled knowledge file) above
+# which a non-manually-set node is auto-promoted to "cubierto". Below the
+# threshold but with any content → "en_progreso". See apply_state_heuristic().
+KNOWLEDGE_CUBIERTO_THRESHOLD = 1500
+
 
 def _slugify(text: str) -> str:
     """Convert a node title to a safe filename slug."""
@@ -284,6 +289,76 @@ class InterviewManager:
         if session_num not in sessions:
             sessions.append(session_num)
             self.update_node(node_id, sesiones=sessions)
+
+    # -------------------------------------------------------- manual / heuristic
+
+    def merge_preserving_manual_states(self, llm_tree: dict) -> dict:
+        """Given an LLM-emitted updated tree, override any node's estado /
+        razon_profundizar with the current (on-disk) value when that node has
+        `estado_manual: true`. Robust to the LLM dropping the field entirely.
+        Also carries the `estado_manual` flag forward into the new tree."""
+        current = self.get_tree()
+        manual_map: dict[str, dict] = {}
+
+        def index(n: dict) -> None:
+            if n.get("estado_manual"):
+                manual_map[n.get("id")] = {
+                    "estado": n.get("estado"),
+                    "razon_profundizar": n.get("razon_profundizar"),
+                }
+            for c in n.get("hijos") or []:
+                index(c)
+
+        index(current["raiz"])
+
+        def patch(n: dict) -> None:
+            mp = manual_map.get(n.get("id"))
+            if mp is not None:
+                n["estado"] = mp["estado"]
+                if mp["razon_profundizar"] is not None:
+                    n["razon_profundizar"] = mp["razon_profundizar"]
+                elif "razon_profundizar" in n:
+                    # Manual + no reason → drop any stale reason the LLM proposed.
+                    del n["razon_profundizar"]
+                n["estado_manual"] = True
+            for c in n.get("hijos") or []:
+                patch(c)
+
+        patch(llm_tree["raiz"])
+        return llm_tree
+
+    def apply_state_heuristic(self) -> int:
+        """For every node where `estado_manual` is not True, derive `estado`
+        from the size of its destilled-knowledge file:
+
+            no knowledge      → leave estado as-is
+            < threshold chars → en_progreso
+            ≥ threshold chars → cubierto
+
+        Returns the number of nodes whose state actually changed."""
+        tree = self.get_tree()
+        touched = 0
+
+        def walk(n: dict) -> None:
+            nonlocal touched
+            if n.get("id") != "r" and not n.get("estado_manual"):
+                content = self.get_node_knowledge(n.get("id", ""))
+                if content:
+                    new_state = (
+                        "cubierto"
+                        if len(content) >= KNOWLEDGE_CUBIERTO_THRESHOLD
+                        else "en_progreso"
+                    )
+                    if n.get("estado") != new_state:
+                        n["estado"] = new_state
+                        touched += 1
+            for c in n.get("hijos") or []:
+                walk(c)
+
+        walk(tree["raiz"])
+        if touched:
+            self.save_tree(tree)
+        return touched
 
     # ----------------------------------------------------------------- views
 
