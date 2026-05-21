@@ -22,6 +22,8 @@ from personalities import (
     PERSONALITIES, DEFAULT_PERSONALITY, VISION_PERSONALITIES,
     DRA_ANA_INTAKE_PROMPT, DRA_ANA_FOLLOWUP_PROMPT,
     THERAPY_METHODS, DEFAULT_THERAPY_METHOD, DRA_ANA_COUPLE_ADDON,
+    INTERVIEW_MODES, DEFAULT_INTERVIEW_MODE,
+    ELENA_INTAKE_PROMPT, ELENA_FOLLOWUP_PROMPT,
     get_voice_for_name,
 )
 from demo_tools import create_demo_client_tools
@@ -29,6 +31,12 @@ from session_manager import SessionManager
 from conversation_log import ConversationLog
 from therapy_tools import create_therapy_tools
 from note_generator import generate_session_notes, generate_intake_notes
+from interview_manager import InterviewManager
+from interview_tools import create_interview_tools
+from interview_note_generator import (
+    generate_intake_notes as generate_interview_intake_notes,
+    generate_session_notes as generate_interview_session_notes,
+)
 from summary_generator import generate_summary, read_summary
 
 logger = logging.getLogger("comerciante-con-voz")
@@ -135,11 +143,11 @@ async def entrypoint(ctx: JobContext):
                         break
                 if not found and parts[1] not in PERSONALITIES:
                     logger.warning(f"Personalidad desconocida solicitada: {parts[1]}")
-        if len(parts) >= 4 and parts[1] == "psicologo":
-            # room_psicologo_{patient_id}_{random}
-            raw_id = "_".join(parts[2:-1])  # handles patient_ids with underscores
+        if len(parts) >= 4 and parts[1] in ("psicologo", "entrevistadora"):
+            # room_{psicologo|entrevistadora}_{id}_{random}
+            raw_id = "_".join(parts[2:-1])  # handles ids with underscores
             patient_id = re.sub(r'[^a-zA-Z0-9_-]', '', raw_id)
-            logger.info(f"Patient ID: '{patient_id}'")
+            logger.info(f"{'Patient' if parts[1] == 'psicologo' else 'Interview'} ID: '{patient_id}'")
 
     # Parse room metadata for custom voice/temperature/model/therapy config/userId
     # room.metadata may be empty due to timing — fetch via API as fallback
@@ -160,6 +168,9 @@ async def entrypoint(ctx: JobContext):
     user_id = "default"
     demo_profile = ""
     platica_id = None
+    interview_mode = None
+    interviewee_name = ""
+    interview_frequency = ""
     try:
         meta = json.loads(room_metadata) if room_metadata.startswith("{") else {}
         custom_voice_id = meta.get("voiceId")
@@ -171,6 +182,9 @@ async def entrypoint(ctx: JobContext):
         user_id = meta.get("userId", "default")
         demo_profile = meta.get("demoProfile", "")
         platica_id = meta.get("platicaId")
+        interview_mode = meta.get("interviewMode")
+        interviewee_name = meta.get("intervieweeName", "")
+        interview_frequency = meta.get("frequency", "")
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -223,6 +237,7 @@ async def entrypoint(ctx: JobContext):
     tools = []
     instructions = personality["system_prompt"]
     manager = None
+    interview_manager = None
 
     # Plática con presenter_persona en texto libre: sustituye el system_prompt
     # de la personalidad por el texto que el usuario escribió en el formulario.
@@ -291,6 +306,59 @@ async def entrypoint(ctx: JobContext):
             instructions += "\n\n--- CONTEXTO DEL PACIENTE ---\n" + context
             logger.info(f"Sesión de seguimiento, sesión #{manager.get_session_number()} - Método: {method_key}")
 
+    if personality.get("has_interview_tools"):
+        # Elena entrevistadora — interview session management + topic tree tools
+        interview_manager = InterviewManager(
+            interview_id=patient_id or "default", user_id=user_id
+        )
+        session_num = interview_manager.get_session_number()
+        tools = create_interview_tools(interview_manager, current_session_num=session_num)
+
+        # "First session" = no entrevista_config.json yet. Same robustness as
+        # therapy: a too-short first session won't write perfil.md, so re-entry
+        # would otherwise repeatedly clobber the chosen mode.
+        if not interview_manager.has_stored_config():
+            mode_key = (
+                interview_mode if interview_mode in INTERVIEW_MODES
+                else DEFAULT_INTERVIEW_MODE
+            )
+            mode_info = INTERVIEW_MODES[mode_key]
+            instructions += f"\n\n--- MODO DE ENTREVISTA ---\n{mode_info['description']}"
+            instructions += "\n\n" + ELENA_INTAKE_PROMPT
+            interview_manager.save_interview_config(
+                mode=mode_key,
+                interviewee_name=interviewee_name,
+                frequency=interview_frequency,
+            )
+            logger.info(
+                f"Entrevista — intake (modo: {mode_info['name']}, "
+                f"entrevistado: '{interviewee_name or '?'}')"
+            )
+        elif interview_manager.is_first_session():
+            stored = interview_manager.get_interview_config()
+            mode_key = stored.get("mode", DEFAULT_INTERVIEW_MODE)
+            if mode_key in INTERVIEW_MODES:
+                instructions += (
+                    f"\n\n--- MODO DE ENTREVISTA ---\n"
+                    f"{INTERVIEW_MODES[mode_key]['description']}"
+                )
+            instructions += "\n\n" + ELENA_INTAKE_PROMPT
+            logger.info(f"Entrevista — re-intake (modo: {mode_key})")
+        else:
+            stored = interview_manager.get_interview_config()
+            mode_key = stored.get("mode", DEFAULT_INTERVIEW_MODE)
+            if mode_key in INTERVIEW_MODES:
+                instructions += (
+                    f"\n\n--- MODO DE ENTREVISTA ---\n"
+                    f"{INTERVIEW_MODES[mode_key]['description']}"
+                )
+            context = interview_manager.build_session_context()
+            instructions += "\n\n" + ELENA_FOLLOWUP_PROMPT
+            instructions += "\n\n--- CONTEXTO DE LA ENTREVISTA ---\n" + context
+            logger.info(
+                f"Entrevista — seguimiento (sesión #{session_num}, modo: {mode_key})"
+            )
+
     # Demo: attach evaluation tools for client/prospect agents
     if personality.get("has_demo_tools"):
         tools = create_demo_client_tools(room)
@@ -303,9 +371,15 @@ async def entrypoint(ctx: JobContext):
         instructions += f"\n\n--- PERFIL DE DEMO ---\nTu perfil de vendedor es: '{demo_profile}'. Ajusta tu estilo de venta según las instrucciones de ese perfil."
         logger.info(f"Demo vendedor, perfil: {demo_profile}")
 
-    # Inject session memory for non-therapy personalities with has_sessions.
-    # Skip when in Plática mode — the guión replaces conversational continuity.
-    if manager is None and personality.get("has_sessions") and platica is None:
+    # Inject session memory for non-therapy/non-interview personalities with
+    # has_sessions. Skip when in Plática mode — the guión replaces conversational
+    # continuity.
+    if (
+        manager is None
+        and interview_manager is None
+        and personality.get("has_sessions")
+        and platica is None
+    ):
         existing_summary = read_summary(user_id, personality_key)
         if existing_summary:
             instructions += (
@@ -549,6 +623,8 @@ async def entrypoint(ctx: JobContext):
         # conv_log ya están persistidos arriba de este bloque.
         if manager is not None:
             await _generate_notes(manager, transcript, start_time)
+        elif interview_manager is not None:
+            await _generate_interview_notes(interview_manager, transcript, start_time)
         elif personality.get("has_sessions") and platica is None:
             try:
                 logger.info(f"Generando resumen de sesión para {personality_key}...")
@@ -872,6 +948,29 @@ async def _generate_notes(manager: SessionManager, transcript: list, start_time:
         logger.info("Notas generadas exitosamente")
     except Exception as e:
         logger.error(f"Error generando notas: {e}", exc_info=True)
+    finally:
+        status_file.unlink(missing_ok=True)
+
+
+async def _generate_interview_notes(
+    manager: InterviewManager, transcript: list, start_time: datetime
+):
+    """Run Elena's post-session pipeline (tree update + knowledge distillation)."""
+    status_file = manager.interview_dir / ".generating"
+    try:
+        status_file.write_text(datetime.now().isoformat(), encoding="utf-8")
+        logger.info("Iniciando análisis post-entrevista...")
+        mode = manager.get_interview_config().get("mode", "legado")
+        session_num = manager.get_session_number()
+        if manager.is_first_session():
+            await generate_interview_intake_notes(manager, transcript, start_time, mode)
+        else:
+            await generate_interview_session_notes(
+                manager, transcript, session_num, start_time, mode
+            )
+        logger.info("Análisis post-entrevista completado")
+    except Exception as e:
+        logger.error(f"Error generando análisis de entrevista: {e}", exc_info=True)
     finally:
         status_file.unlink(missing_ok=True)
 

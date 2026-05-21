@@ -27,6 +27,7 @@ export const CARTESIA_VOICES_ES = [
   { id: 'acf43c61-39a7-440d-8089-21a8a7300f91', name: 'Eduardo Llaguno (clon)', gender: 'M' },
   { id: 'cefcb124-080b-4655-b31f-932f3ee743de', name: 'Elena - Narradora (ES)', gender: 'F' },
   { id: 'b0689631-eee7-4a6c-bb86-195f1d267c2e', name: 'Emilio - Optimista', gender: 'M' },
+  { id: 'b4b8e2af-6139-466e-a93a-30c20d2e1fc5', name: 'Fernanda', gender: 'F' },
   { id: '79743797-2087-422f-8dc7-86f9efca85f1', name: 'Fran - Profesional Joven', gender: 'M' },
   { id: '5ef98b2a-68d2-4a35-ac52-632a2d288ea6', name: 'Gabriel - Hombre Serio (ES)', gender: 'M' },
   { id: 'dbaa1a0d-e004-442d-866f-5431b18d8d54', name: 'Guadalupe - Cuentacuentos', gender: 'F' },
@@ -505,6 +506,14 @@ export const DEFAULT_CONFIGS: Record<string, PersonalityConfig> = {
     temperature: 0.6,
     speed: 0.85,
     model: DEFAULT_MODEL,
+  },
+  entrevistadora: {
+    name: 'Elena',
+    voiceId: 'b4b8e2af-6139-466e-a93a-30c20d2e1fc5',
+    visualizer: 'aura',
+    temperature: 0.7,
+    speed: 0.95,
+    model: 'deepseek/deepseek-v4-flash',
   },
   hippy: {
     name: 'Paz',

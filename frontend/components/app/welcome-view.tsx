@@ -72,6 +72,15 @@ const ALL_PERSONALITY_CATEGORIES = [
     description: 'Ayudante en pláticas',
     emoji: '👋',
   },
+  {
+    // Navigation-only card: doesn't pick a personality, just routes to the
+    // entrevistas section where the user picks/creates an interview.
+    key: 'entrevistas',
+    name: 'Entrevistas',
+    description: 'Preserva memorias o conocimiento',
+    emoji: '🎙️',
+    href: '/entrevistas',
+  },
 ];
 
 // Layout config: maps category key → position (1-6). 0 or absent = hidden.
@@ -89,6 +98,7 @@ const DEFAULT_LAYOUT: PersonalityLayout = {
   nutriologa: 9,
   ia_honesta: 10,
   tato: 11,
+  entrevistas: 12,
 };
 
 export function loadPersonalityLayout(
@@ -353,6 +363,11 @@ export interface TherapyOptions {
   // Despite the name, this options bag also carries Plática context. When set,
   // the agent loads the corresponding presentation guion and runs in plática mode.
   platicaId?: string;
+  // Interview context (Elena entrevistadora). When set, the agent treats the
+  // session as an interview run.
+  interviewMode?: 'legado' | 'corporativo';
+  intervieweeName?: string;
+  frequency?: string;
 }
 
 interface WelcomeViewProps {
@@ -678,22 +693,44 @@ export const WelcomeView = ({
 
         <div className="mb-5 grid w-full max-w-md grid-cols-3 gap-2.5">
           {visiblePersonalities
-            .filter((p) => !(isGuest && (p.key === 'psicologo' || p.key === 'nutriologa')))
-            .map((p) => (
-              <button
-                key={p.key}
-                onClick={() => onSelectPersonality(p.key)}
-                className={`flex flex-col items-center rounded-xl border-[3px] px-3 py-2.5 transition-all ${
-                  selectedPersonality === p.key
-                    ? 'scale-[1.05] border-amber-500 bg-amber-500/15 shadow-xl ring-4 ring-amber-400/40 dark:border-amber-400 dark:bg-amber-400/15'
-                    : 'border-border hover:border-muted-foreground/50'
-                }`}
-              >
-                <span className="mb-1 text-xl">{p.emoji}</span>
-                <span className="text-foreground text-xs font-semibold">{p.name}</span>
-                <span className="text-muted-foreground text-[10px]">{p.description}</span>
-              </button>
-            ))}
+            .filter(
+              (p) =>
+                !(
+                  isGuest &&
+                  (p.key === 'psicologo' || p.key === 'nutriologa' || p.key === 'entrevistas')
+                )
+            )
+            .map((p) => {
+              const baseCls =
+                'flex flex-col items-center rounded-xl border-[3px] px-3 py-2.5 transition-all';
+              const selectedCls =
+                selectedPersonality === p.key
+                  ? 'scale-[1.05] border-amber-500 bg-amber-500/15 shadow-xl ring-4 ring-amber-400/40 dark:border-amber-400 dark:bg-amber-400/15'
+                  : 'border-border hover:border-muted-foreground/50';
+              const inner = (
+                <>
+                  <span className="mb-1 text-xl">{p.emoji}</span>
+                  <span className="text-foreground text-xs font-semibold">{p.name}</span>
+                  <span className="text-muted-foreground text-[10px]">{p.description}</span>
+                </>
+              );
+              if ('href' in p && p.href) {
+                return (
+                  <Link key={p.key} href={p.href} className={`${baseCls} ${selectedCls}`}>
+                    {inner}
+                  </Link>
+                );
+              }
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => onSelectPersonality(p.key)}
+                  className={`${baseCls} ${selectedCls}`}
+                >
+                  {inner}
+                </button>
+              );
+            })}
         </div>
 
         {/* Famous character selector */}

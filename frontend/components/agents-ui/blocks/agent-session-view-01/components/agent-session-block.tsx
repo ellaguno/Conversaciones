@@ -185,6 +185,7 @@ const PERSONALITY_SUBTITLE: Record<string, string> = {
   abogado_familiar: 'Abogado',
   abogado_inmobiliario: 'Abogado',
   psicologo: 'Psicóloga',
+  entrevistadora: 'Entrevista',
   hippy: 'Conversacion',
   normal: 'Conversacion',
   tesla: 'Personaje Famoso',

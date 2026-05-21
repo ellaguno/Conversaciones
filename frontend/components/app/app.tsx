@@ -35,6 +35,13 @@ interface AppProps {
   appConfig: AppConfig;
   initialPersonality?: string;
   initialPatientId?: string;
+  // When set + initialPersonality === 'entrevistadora' + initialPatientId,
+  // the app auto-starts an interview session on mount (skips the welcome view).
+  autoStartInterview?: {
+    mode: 'legado' | 'corporativo';
+    intervieweeName?: string;
+    frequency?: string;
+  };
 }
 
 function GuestTimerBanner({
@@ -82,6 +89,9 @@ function SessionInner({
   therapyMethod,
   coupleTherapy,
   platicaId,
+  interviewMode,
+  intervieweeName,
+  interviewFrequency,
   initialPatientId,
   isGuest,
   guestMinutes,
@@ -104,6 +114,9 @@ function SessionInner({
   therapyMethod: string;
   coupleTherapy: boolean;
   platicaId: string;
+  interviewMode: string;
+  intervieweeName: string;
+  interviewFrequency: string;
   initialPatientId?: string;
   isGuest: boolean;
   guestMinutes: number;
@@ -125,6 +138,9 @@ function SessionInner({
           ...(therapyMethod && { therapyMethod }),
           ...(coupleTherapy && { coupleTherapy }),
           ...(platicaId && { platicaId }),
+          ...(interviewMode && { interviewMode }),
+          ...(intervieweeName && { intervieweeName }),
+          ...(interviewFrequency && { frequency: interviewFrequency }),
         }),
       });
       if (!res.ok) {
@@ -153,6 +169,9 @@ function SessionInner({
     therapyMethod,
     coupleTherapy,
     platicaId,
+    interviewMode,
+    intervieweeName,
+    interviewFrequency,
   ]);
 
   const session = useSession(
@@ -268,7 +287,12 @@ function GuestExpiredView() {
   );
 }
 
-export function App({ appConfig, initialPersonality, initialPatientId }: AppProps) {
+export function App({
+  appConfig,
+  initialPersonality,
+  initialPatientId,
+  autoStartInterview,
+}: AppProps) {
   const { data: authSession, status: authStatus } = useAuthSession();
   const router = useRouter();
   const isLoggedIn = !!authSession?.user;
@@ -285,6 +309,9 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const [activeTherapyMethod, setActiveTherapyMethod] = useState('');
   const [activeCoupleTherapy, setActiveCoupleTherapy] = useState(false);
   const [activePlaticaId, setActivePlaticaId] = useState('');
+  const [activeInterviewMode, setActiveInterviewMode] = useState('');
+  const [activeIntervieweeName, setActiveIntervieweeName] = useState('');
+  const [activeInterviewFrequency, setActiveInterviewFrequency] = useState('');
 
   // Guest mode state
   const [guestConfig, setGuestConfig] = useState<{
@@ -358,6 +385,9 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       setActiveTherapyMethod(therapy?.therapyMethod || '');
       setActiveCoupleTherapy(therapy?.coupleTherapy || false);
       setActivePlaticaId(therapy?.platicaId || '');
+      setActiveInterviewMode(therapy?.interviewMode || '');
+      setActiveIntervieweeName(therapy?.intervieweeName || '');
+      setActiveInterviewFrequency(therapy?.frequency || '');
       setAutoConnect(true);
       setSessionId((prev) => prev + 1);
       // Guardar como "último agente" para el próximo login (solo logueados).
@@ -379,6 +409,26 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
   const handleDisconnected = useCallback(() => {
     setAutoConnect(false);
   }, []);
+
+  // Auto-start an interview session when the page deep-links into one.
+  // Only fires once on mount (sessionId guards against re-firing).
+  const interviewAutoStarted = useRef(false);
+  useEffect(() => {
+    if (interviewAutoStarted.current) return;
+    if (
+      autoStartInterview &&
+      initialPersonality === 'entrevistadora' &&
+      initialPatientId &&
+      isLoggedIn
+    ) {
+      interviewAutoStarted.current = true;
+      handleStartCall('entrevistadora', initialPatientId, {
+        interviewMode: autoStartInterview.mode,
+        intervieweeName: autoStartInterview.intervieweeName,
+        frequency: autoStartInterview.frequency,
+      });
+    }
+  }, [autoStartInterview, initialPersonality, initialPatientId, isLoggedIn, handleStartCall]);
 
   const handleSaveConfigs = useCallback((newConfigs: Record<string, PersonalityConfig>) => {
     setConfigs(newConfigs);
@@ -441,6 +491,9 @@ export function App({ appConfig, initialPersonality, initialPatientId }: AppProp
       therapyMethod={activeTherapyMethod}
       coupleTherapy={activeCoupleTherapy}
       platicaId={activePlaticaId}
+      interviewMode={activeInterviewMode}
+      intervieweeName={activeIntervieweeName}
+      interviewFrequency={activeInterviewFrequency}
       initialPatientId={initialPatientId}
       isGuest={isGuest}
       guestMinutes={guestConfig?.guestMinutes || 10}

@@ -36,6 +36,7 @@ const VALID_PERSONALITIES = new Set([
   'abogado_familiar',
   'abogado_inmobiliario',
   'psicologo',
+  'entrevistadora',
   'hippy',
   'normal',
   'tesla',
@@ -121,8 +122,8 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     let rawPersonality = body?.personality || 'normal';
 
-    // Guests cannot use psicologo (requires session management)
-    if (isGuest && rawPersonality === 'psicologo') {
+    // Guests cannot use psicologo or entrevistadora (require session management)
+    if (isGuest && (rawPersonality === 'psicologo' || rawPersonality === 'entrevistadora')) {
       rawPersonality = 'normal';
     }
     // Accept known personalities or custom_* keys
@@ -143,11 +144,19 @@ export async function POST(req: Request) {
       typeof body?.platicaId === 'string' && /^[a-zA-Z0-9_-]+$/.test(body.platicaId)
         ? body.platicaId
         : '';
+    const interviewMode =
+      body?.interviewMode === 'legado' || body?.interviewMode === 'corporativo'
+        ? body.interviewMode
+        : '';
+    const intervieweeName =
+      typeof body?.intervieweeName === 'string' ? body.intervieweeName.slice(0, 80) : '';
+    const interviewFrequency =
+      typeof body?.frequency === 'string' ? body.frequency.slice(0, 80) : '';
 
     const participantName = 'user';
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
     const roomName =
-      personality === 'psicologo' && patientId
+      (personality === 'psicologo' || personality === 'entrevistadora') && patientId
         ? `room_${personality}_${patientId}_${Math.floor(Math.random() * 10_000)}`
         : `room_${personality}_${Math.floor(Math.random() * 10_000)}`;
 
@@ -166,6 +175,9 @@ export async function POST(req: Request) {
       ...(coupleTherapy && { coupleTherapy }),
       ...(demoProfile && { demoProfile }),
       ...(platicaId && { platicaId }),
+      ...(interviewMode && { interviewMode }),
+      ...(intervieweeName && { intervieweeName }),
+      ...(interviewFrequency && { frequency: interviewFrequency }),
     });
 
     await roomService.createRoom({
