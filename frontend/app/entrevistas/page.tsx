@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { DeleteInterviewButton } from './_delete-button';
 import { NewInterviewForm } from './_new-form';
 
 interface Interview {
@@ -78,15 +79,15 @@ export default async function EntrevistasListPage() {
             {interviews.map((iv) => (
               <li
                 key={iv.id}
-                className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
+                className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
               >
                 <Link
                   href={`/entrevistas/${encodeURIComponent(iv.id)}`}
-                  className="block hover:opacity-80"
+                  className="min-w-0 flex-1 hover:opacity-80"
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{iv.intervieweeName || iv.id}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{iv.intervieweeName || iv.id}</div>
                       <div className="text-xs text-zinc-500 dark:text-zinc-400">
                         Modo: {iv.mode} · {iv.sessionCount} sesion
                         {iv.sessionCount === 1 ? '' : 'es'}
@@ -94,11 +95,16 @@ export default async function EntrevistasListPage() {
                         {iv.hasProfile ? ' · perfil' : ''}
                       </div>
                     </div>
-                    <span className="text-xs text-zinc-400">
+                    <span className="shrink-0 text-xs text-zinc-400">
                       {iv.updatedAt ? new Date(iv.updatedAt).toLocaleDateString() : '—'}
                     </span>
                   </div>
                 </Link>
+                <DeleteInterviewButton
+                  id={iv.id}
+                  intervieweeName={iv.intervieweeName}
+                  sessionCount={iv.sessionCount}
+                />
               </li>
             ))}
           </ul>

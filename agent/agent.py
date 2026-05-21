@@ -107,7 +107,7 @@ class ComercianteAgent(Agent):
 # 5-15s con transcript largo) sin tener que ramificar el worker. Para pláticas
 # el resumen se omite, pero esto cubre las sesiones normales (Tato, Dra. Ana,
 # etc.) donde la nota/resumen sí se reinyecta en sesiones futuras.
-server = AgentServer(shutdown_process_timeout=30.0)
+server = AgentServer(shutdown_process_timeout=120.0, load_threshold=0.95)
 
 
 @server.rtc_session()

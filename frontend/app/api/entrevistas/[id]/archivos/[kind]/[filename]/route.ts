@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, readFileSync, renameSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { auth } from '@/lib/auth';
 import { getUserDataDir, getUserSessionsDir } from '@/lib/data-paths';
@@ -83,5 +83,57 @@ export async function GET(req: Request, ctx: RouteCtx) {
   } catch (error) {
     console.error('Error reading interview file:', error);
     return NextResponse.json({ error: 'Error' }, { status: 500 });
+  }
+}
+
+// Soft-delete a single interview file (session note, knowledge file, or
+// transcript). Renames to `<name>.<ext>.deleted_<ts>` instead of unlinking so
+// admins can recover from disk if needed — consistent with the per-interview
+// DELETE in /api/entrevistas.
+export async function DELETE(req: Request, ctx: RouteCtx) {
+  try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`ent-file-del:${ip}`, 30, 60_000)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+    const userId = session.user.id;
+
+    const { id: rawId, kind: rawKind, filename: rawFilename } = await ctx.params;
+    const id = safeSegment(rawId);
+    const kind = safeSegment(rawKind);
+    const filename = safeSegment(rawFilename);
+
+    if (!id || !filename || !filename.endsWith('.md')) {
+      return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 });
+    }
+    if (!(kind in KIND_TO_SUBPATH)) {
+      return NextResponse.json({ error: 'Tipo desconocido' }, { status: 400 });
+    }
+
+    const userDataDir = getUserDataDir(userId);
+    const subPath = KIND_TO_SUBPATH[kind](id);
+    const filePath = join(userDataDir, ...subPath, filename);
+
+    const safeRoot =
+      kind === 'transcript'
+        ? join(userDataDir, 'conversations', 'entrevistadora')
+        : join(getUserSessionsDir(userId), id);
+    if (!resolve(filePath).startsWith(resolve(safeRoot))) {
+      return NextResponse.json({ error: 'Ruta inválida' }, { status: 400 });
+    }
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+    }
+
+    renameSync(filePath, `${filePath}.deleted_${Date.now()}`);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting interview file:', error);
+    return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
   }
 }

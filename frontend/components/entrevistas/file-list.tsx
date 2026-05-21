@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { RenderedMarkdown } from '@/components/markdown/rendered-markdown';
 
 interface FileListProps {
@@ -9,6 +10,12 @@ interface FileListProps {
   files: string[];
   emptyHint?: string;
 }
+
+const KIND_LABEL: Record<FileListProps['kind'], string> = {
+  sesion: 'esta nota de sesión',
+  conocimiento: 'este archivo de conocimiento',
+  transcript: 'esta transcripción',
+};
 
 interface ViewerState {
   open: boolean;
@@ -22,6 +29,7 @@ interface ViewerState {
  * "ver" (opens an inline viewer) and "descargar" (triggers a file download).
  */
 export function FileList({ interviewId, kind, files, emptyHint }: FileListProps) {
+  const router = useRouter();
   const [viewer, setViewer] = useState<ViewerState>({
     open: false,
     filename: null,
@@ -29,6 +37,26 @@ export function FileList({ interviewId, kind, files, emptyHint }: FileListProps)
     loading: false,
     error: null,
   });
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function onDelete(filename: string) {
+    const ok = window.confirm(
+      `¿Borrar ${KIND_LABEL[kind]}?\n\n${filename}\n\nEsta acción no se puede deshacer desde la app (el archivo se renombra a .deleted_<ts> y queda en disco para recuperación manual).`
+    );
+    if (!ok) return;
+    setDeleting(filename);
+    try {
+      const res = await fetch(urlFor(filename), { method: 'DELETE' });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        alert(`No se pudo borrar (${res.status}). ${t}`);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   function urlFor(filename: string, download = false): string {
     const base = `/api/entrevistas/${encodeURIComponent(interviewId)}/archivos/${kind}/${encodeURIComponent(filename)}`;
@@ -97,6 +125,13 @@ export function FileList({ interviewId, kind, files, emptyHint }: FileListProps)
               >
                 descargar
               </a>
+              <button
+                onClick={() => onDelete(f)}
+                disabled={deleting === f}
+                className="text-xs text-red-600 underline hover:text-red-800 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
+              >
+                {deleting === f ? 'borrando…' : 'borrar'}
+              </button>
             </span>
           </li>
         ))}

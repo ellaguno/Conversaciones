@@ -540,35 +540,14 @@ export const WelcomeView = ({
   return (
     <div ref={ref}>
       <section className="bg-background flex flex-col items-center justify-center px-4 text-center">
-        {/* Logo + title */}
-        <div className="mb-3 flex flex-col items-center gap-2">
+        {/* Logo */}
+        <div className="mb-3 flex flex-col items-center">
           <img
             src="/logo_transparente.png"
             alt="Conversaciones"
             className="h-24 w-auto object-contain"
           />
-          <h1 className="text-foreground text-2xl font-bold">Conversaciones</h1>
         </div>
-
-        {/* Metrics bar — admin only */}
-        {isAdmin && metrics && metrics.total_tokens > 0 && (
-          <div className="border-border bg-muted/40 text-muted-foreground mb-4 flex flex-col items-center gap-1 rounded-2xl border px-4 py-2 font-mono text-[11px]">
-            <div className="flex items-center gap-4">
-              <span>{metrics.total_tokens.toLocaleString()} tokens</span>
-              <span className="text-border">|</span>
-              <span className="font-semibold">${metrics.total_cost_usd.toFixed(4)} USD</span>
-              <span className="text-border">|</span>
-              <span>{metrics.llm_calls} llamadas</span>
-            </div>
-            <div className="flex items-center gap-3 text-[10px] opacity-70">
-              <span>LLM ${(metrics.llm_cost_usd || 0).toFixed(4)}</span>
-              <span className="text-border">·</span>
-              <span>Voz ${(metrics.tts_cost_usd || 0).toFixed(4)}</span>
-              <span className="text-border">·</span>
-              <span>Escucha ${(metrics.stt_cost_usd || 0).toFixed(4)}</span>
-            </div>
-          </div>
-        )}
 
         {isGenerating && (
           <div className="mb-4 flex w-full max-w-md items-center justify-center gap-2.5 rounded-xl border-2 border-purple-300 bg-purple-50 px-4 py-3 dark:border-purple-700 dark:bg-purple-950/30">
@@ -1407,6 +1386,27 @@ export const WelcomeView = ({
         <p className="text-foreground mt-4 text-center text-xs font-bold">
           Servicio de 8am a 8pm hora central de México
         </p>
+
+        {/* Metrics bar — admin only */}
+        {isAdmin && metrics && metrics.total_tokens > 0 && (
+          <div className="border-border bg-muted/40 text-muted-foreground mt-3 flex flex-col items-center gap-1 rounded-2xl border px-4 py-2 font-mono text-[11px]">
+            <div className="flex items-center gap-4">
+              <span>{metrics.total_tokens.toLocaleString()} tokens</span>
+              <span className="text-border">|</span>
+              <span className="font-semibold">${metrics.total_cost_usd.toFixed(4)} USD</span>
+              <span className="text-border">|</span>
+              <span>{metrics.llm_calls} llamadas</span>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] opacity-70">
+              <span>LLM ${(metrics.llm_cost_usd || 0).toFixed(4)}</span>
+              <span className="text-border">·</span>
+              <span>Voz ${(metrics.tts_cost_usd || 0).toFixed(4)}</span>
+              <span className="text-border">·</span>
+              <span>Escucha ${(metrics.stt_cost_usd || 0).toFixed(4)}</span>
+            </div>
+          </div>
+        )}
+
         <span className="text-muted-foreground mt-1 text-[10px]">
           v{process.env.NEXT_PUBLIC_APP_VERSION}
         </span>
