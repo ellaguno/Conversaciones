@@ -24,12 +24,7 @@ function getGoogleProvider() {
 
 const googleProvider = getGoogleProvider();
 
-const PUBLIC_PATHS = [
-  '/login',
-  '/register',
-  '/forgot-password',
-  '/reset-password',
-];
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 // Paths that guests may access — the page/API itself checks guestEnabled
 const GUEST_PATHS = [
