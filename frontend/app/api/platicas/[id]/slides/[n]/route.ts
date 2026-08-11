@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'fs';
 // Node 18 needs `File` imported explicitly from `node:buffer` (not yet a global).
 import { File } from 'node:buffer';
 import { auth } from '@/lib/auth';
+import { authorizePlaticaRead } from '@/lib/platica-access';
 import {
   SLIDE_MIME_TYPES,
   type SlideExtension,
@@ -26,19 +27,13 @@ export async function GET(
   if (!rateLimit(`platicas-slide:${ip}`, 600, 60_000)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
   }
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  }
   const { id, n } = await params;
-  const manifest = readManifest(id);
-  if (!manifest) {
-    return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
+  // Lectura: owner, cualquier autenticado si shared, cualquiera si public_link.
+  const access = await authorizePlaticaRead(id);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  // Lectura permitida al owner o a cualquiera si la plática está compartida.
-  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-  }
+  const { manifest } = access;
   // n is "001" (string) or "1"; accept both.
   const slideNumber = parseInt(n, 10);
   if (!Number.isInteger(slideNumber) || slideNumber < 1 || slideNumber > manifest.slide_count) {

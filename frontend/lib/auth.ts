@@ -34,6 +34,23 @@ const GUEST_PATHS = [
   '/api/settings/personality-defaults',
 ];
 
+// Pláticas con liga pública: el visitante externo no tiene cuenta, así que el
+// middleware no puede decidir aquí — deja pasar la vista de proyección y las
+// lecturas de UNA plática concreta, y cada ruta valida manifest.public_link
+// (lib/platica-access.ts). Mismo patrón que GUEST_PATHS.
+//
+// Solo lectura: /api/platicas sin id (la lista de todas) queda fuera, y los
+// métodos de escritura se filtran por método más abajo.
+function isPublicPlaticaPath(pathname: string, method: string): boolean {
+  if (pathname === '/presentar' || pathname.startsWith('/presentar/')) return true;
+  if (method !== 'GET' && method !== 'HEAD') {
+    // Única excepción de escritura: el envío de la transcripción al terminar,
+    // que la propia ruta restringe a pláticas públicas y valida el correo.
+    return method === 'POST' && /^\/api\/platicas\/[^/]+\/transcript$/.test(pathname);
+  }
+  return /^\/api\/platicas\/[^/]+(\/|$)/.test(pathname);
+}
+
 const config: NextAuthConfig = {
   providers: [
     Credentials({
@@ -133,6 +150,11 @@ const config: NextAuthConfig = {
 
       // Allow guest-eligible paths without auth — the page/API checks guestEnabled
       if (!isLoggedIn && GUEST_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+        return true;
+      }
+
+      // Allow public-link pláticas without auth — the API checks public_link
+      if (!isLoggedIn && isPublicPlaticaPath(pathname, request.method)) {
         return true;
       }
 

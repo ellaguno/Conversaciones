@@ -85,10 +85,15 @@ export interface PlaticaManifest {
   presenter_overlay_corner?: OverlayCorner; // default 'top-right'
   presenter_visualizer?: PresenterVisualizer; // default 'aura'
   audience_mode?: AudienceMode; // default 'open'
-  // Si true, la plática aparece en la lista de TODOS los usuarios autenticados
-  // y cualquiera puede iniciarla / proyectarla. Solo el owner puede editarla,
-  // borrarla o cambiar el flag. Default false (privada).
+  // Compartir INTERNO: la plática aparece en la lista de TODOS los usuarios
+  // autenticados y cualquiera puede iniciarla / proyectarla. Solo el owner
+  // puede editarla, borrarla o cambiar el flag. Default false (privada).
   shared?: boolean;
+  // Compartir EXTERNO: cualquiera con la liga puede abrir /presentar/<id> sin
+  // cuenta ni login, incluyendo el modo live (audio del orador). No aparece en
+  // ninguna lista — el único descubrimiento es la liga. Consume minutos de
+  // LiveKit/LLM por cada visitante que la corra. Default false.
+  public_link?: boolean;
   voice_id?: string;
   // Velocidad del orador (Cartesia Sonic-3). Rango válido 0.6–2.0; clampeado en
   // el agente. Cuando viene en el manifest, se usa como velocidad inicial al
@@ -160,6 +165,7 @@ export interface PlaticaListItem {
   // muestre o esconda los controles de edición.
   owner_user_id: string;
   shared: boolean;
+  public_link: boolean;
 }
 
 // Validation helpers used by API routes when accepting upload payloads.
@@ -249,6 +255,9 @@ export function validateManifestPayload(raw: unknown):
   if (m.shared !== undefined && typeof m.shared !== 'boolean') {
     return { ok: false, error: 'shared debe ser booleano' };
   }
+  if (m.public_link !== undefined && typeof m.public_link !== 'boolean') {
+    return { ok: false, error: 'public_link debe ser booleano' };
+  }
   if (m.voice_id !== undefined && typeof m.voice_id !== 'string') {
     return { ok: false, error: 'voice_id debe ser una cadena' };
   }
@@ -280,6 +289,7 @@ export function validateManifestPayload(raw: unknown):
       presenter_visualizer: (m.presenter_visualizer as PresenterVisualizer | undefined) ?? 'aura',
       audience_mode: (m.audience_mode as AudienceMode | undefined) ?? 'open',
       shared: (m.shared as boolean | undefined) ?? false,
+      public_link: (m.public_link as boolean | undefined) ?? false,
       voice_id: (m.voice_id as string | undefined)?.trim() || undefined,
       speed: (m.speed as number | undefined) ?? undefined,
       model: (m.model as string | undefined)?.trim() || undefined,

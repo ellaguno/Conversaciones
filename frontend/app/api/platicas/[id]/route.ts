@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { authorizePlaticaRead } from '@/lib/platica-access';
 import {
   type PlaticaManifest,
   validateGuionPayload,
@@ -19,20 +20,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!rateLimit(`platicas-get:${ip}`, 120, 60_000)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
   }
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  }
   const { id } = await params;
-  const manifest = readManifest(id);
-  if (!manifest) {
-    return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
-  }
-  // Lectura: el owner siempre, o cualquiera si está compartida (shared=true).
+  // Lectura: owner, cualquier autenticado si shared, cualquiera si public_link.
   // Las escrituras (PATCH/DELETE más abajo) siguen siendo solo del owner.
-  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+  const access = await authorizePlaticaRead(id);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
+  const { manifest } = access;
   const guion = readGuion(id);
   if (!guion) {
     return NextResponse.json({ error: 'Guion faltante' }, { status: 500 });
@@ -95,6 +90,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ? m.presenter_visualizer
           : existing.presenter_visualizer,
       shared: m.shared !== undefined ? m.shared : existing.shared,
+      public_link: m.public_link !== undefined ? m.public_link : existing.public_link,
       voice_id: m.voice_id !== undefined ? m.voice_id : existing.voice_id,
       speed: m.speed !== undefined ? m.speed : existing.speed,
       audience_mode: m.audience_mode !== undefined ? m.audience_mode : existing.audience_mode,

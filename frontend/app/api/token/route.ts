@@ -7,8 +7,21 @@ import {
 } from 'livekit-server-sdk';
 import { auth } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
+import { guestUserIdFromIp } from '@/lib/platica-access';
+import { readManifest } from '@/lib/platicas-storage';
 import { rateLimit } from '@/lib/rate-limit';
 import { readSettings } from '@/lib/settings';
+
+// ¿La plática solicitada tiene liga externa activa? Se consulta ANTES de
+// exigir sesión, por eso lee el manifest directo del disco.
+function isPublicPlatica(rawId: unknown): boolean {
+  if (typeof rawId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(rawId)) return false;
+  try {
+    return readManifest(rawId)?.public_link === true;
+  } catch {
+    return false;
+  }
+}
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -105,12 +118,18 @@ export async function POST(req: Request) {
         // Demo personalities don't require auth
         userId = `demo_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
         isGuest = true;
+      } else if (isPublicPlatica(body_peek?.platicaId)) {
+        // Plática con liga externa: el visitante corre la presentación completa
+        // (audio del orador) sin cuenta. Independiente de guestEnabled — lo
+        // habilita el owner por plática, no el ajuste global de invitados.
+        userId = guestUserIdFromIp(ip);
+        isGuest = true;
       } else {
         const settings = readSettings();
         if (!settings.guestEnabled) {
           return new NextResponse('No autenticado', { status: 401 });
         }
-        userId = `guest_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        userId = guestUserIdFromIp(ip);
         isGuest = true;
       }
     }

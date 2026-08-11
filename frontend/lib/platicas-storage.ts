@@ -184,6 +184,7 @@ export function listPlaticasForUser(userId: string): PlaticaListItem[] {
       advance_mode: m.advance_mode,
       owner_user_id: m.owner_user_id,
       shared: isShared,
+      public_link: m.public_link === true,
     });
   }
   // Ordena propias primero, luego por fecha desc dentro de cada grupo, para

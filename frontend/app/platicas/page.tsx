@@ -17,6 +17,7 @@ export default function PlaticasListPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [shareBusyId, setShareBusyId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -44,17 +45,18 @@ export default function PlaticasListPage() {
     router.push('/');
   };
 
-  // Toggle del flag `shared`: PATCH al manifest. Optimista — actualizamos
-  // el item localmente y, si falla, refrescamos para reconciliar con el server.
-  const toggleShared = async (id: string, next: boolean) => {
+  // Toggle de los flags de compartir (`shared` = interno, `public_link` =
+  // liga externa). PATCH al manifest, optimista — actualizamos el item
+  // localmente y, si falla, refrescamos para reconciliar con el server.
+  const toggleShare = async (id: string, patch: { shared?: boolean; public_link?: boolean }) => {
     setShareBusyId(id);
-    setItems((prev) => (prev ? prev.map((p) => (p.id === id ? { ...p, shared: next } : p)) : prev));
+    setItems((prev) => (prev ? prev.map((p) => (p.id === id ? { ...p, ...patch } : p)) : prev));
     try {
       const r = await fetch(`/api/platicas/${id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manifest: { shared: next } }),
+        body: JSON.stringify({ manifest: patch }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
@@ -65,6 +67,23 @@ export default function PlaticasListPage() {
       await refresh();
     } finally {
       setShareBusyId(null);
+    }
+  };
+
+  // La liga externa apunta a ?mode=live: el visitante no tiene una segunda
+  // pantalla con el operador, necesita slide + audio en la misma página.
+  const publicUrl = (id: string) =>
+    typeof window === 'undefined' ? '' : `${window.location.origin}/presentar/${id}?mode=live`;
+
+  const copyPublicLink = async (id: string) => {
+    const url = publicUrl(id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 2000);
+    } catch {
+      // Sin permiso de clipboard (http, Safari viejo): que al menos la vea.
+      prompt('Copia la liga:', url);
     }
   };
 
@@ -148,7 +167,12 @@ export default function PlaticasListPage() {
                       )}
                       {isOwner && p.shared && (
                         <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-emerald-700 uppercase dark:text-emerald-300">
-                          Pública
+                          Interna
+                        </span>
+                      )}
+                      {isOwner && p.public_link && (
+                        <span className="rounded bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-sky-700 uppercase dark:text-sky-300">
+                          Liga pública
                         </span>
                       )}
                     </div>
@@ -192,17 +216,39 @@ export default function PlaticasListPage() {
                       <>
                         <label
                           className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs select-none"
-                          title="Si activas, todos los usuarios autenticados podrán ver, iniciar y proyectar esta plática (no editarla)"
+                          title="Compartir INTERNO: todos los usuarios autenticados de la plataforma podrán ver, iniciar y proyectar esta plática (no editarla)"
                         >
                           <input
                             type="checkbox"
                             checked={p.shared}
                             disabled={shareBusyId === p.id}
-                            onChange={(e) => toggleShared(p.id, e.target.checked)}
+                            onChange={(e) => toggleShare(p.id, { shared: e.target.checked })}
                             className="accent-emerald-600"
                           />
-                          compartir
+                          interno
                         </label>
+                        <label
+                          className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs select-none"
+                          title="Compartir EXTERNO: cualquiera con la liga la corre completa (con audio) sin cuenta ni login. Cada visitante consume minutos de tu cuenta."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={p.public_link}
+                            disabled={shareBusyId === p.id}
+                            onChange={(e) => toggleShare(p.id, { public_link: e.target.checked })}
+                            className="accent-sky-600"
+                          />
+                          externo
+                        </label>
+                        {p.public_link && (
+                          <button
+                            onClick={() => copyPublicLink(p.id)}
+                            className="rounded-full border border-sky-600 px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider text-sky-700 uppercase hover:bg-sky-600/10 dark:text-sky-400"
+                            title="Copiar la liga para compartir fuera de la plataforma"
+                          >
+                            {copiedId === p.id ? '¡copiada!' : 'copiar liga'}
+                          </button>
+                        )}
                         <Link
                           href={`/platicas/${p.id}/editar`}
                           className="text-muted-foreground hover:text-foreground rounded px-2 py-1 text-xs"

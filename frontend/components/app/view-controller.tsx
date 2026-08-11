@@ -41,11 +41,15 @@ function PostSessionView({
   personalityName,
   onContinue,
   isGuest,
+  platicaId,
 }: {
   personalityKey: string;
   personalityName: string;
   onContinue: () => void;
   isGuest?: boolean;
+  // En modo plática la transcripción no vive en la carpeta de la personalidad
+  // sino en `platica_<id>`, y la recoge su propio endpoint.
+  platicaId?: string;
 }) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -70,7 +74,14 @@ function PostSessionView({
         if (!cancelled) setUserEmail('');
       });
 
-    // Poll transcript
+    // Poll transcript. En plática no aplica: el endpoint de envío espera por
+    // su cuenta a que el agente escriba el archivo.
+    if (platicaId) {
+      setReady(true);
+      return () => {
+        cancelled = true;
+      };
+    }
     const check = async () => {
       for (let i = 0; i < 10; i++) {
         if (cancelled) return;
@@ -96,7 +107,7 @@ function PostSessionView({
     return () => {
       cancelled = true;
     };
-  }, [personalityKey, isGuest]);
+  }, [personalityKey, isGuest, platicaId]);
 
   const handleSaveEmailAndSend = useCallback(async () => {
     if (!emailInput.includes('@')) return;
@@ -122,14 +133,20 @@ function PostSessionView({
     setSending(true);
     setError('');
     try {
-      const res = await fetch('/api/conversations/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personality: personalityKey,
-          personalityName,
-        }),
-      });
+      const res = platicaId
+        ? await fetch(`/api/platicas/${platicaId}/transcript`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+        : await fetch('/api/conversations/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              personality: personalityKey,
+              personalityName,
+            }),
+          });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error al enviar');
@@ -140,7 +157,7 @@ function PostSessionView({
     } finally {
       setSending(false);
     }
-  }, [personalityKey, personalityName]);
+  }, [personalityKey, personalityName, platicaId]);
 
   const hasEmail = !!userEmail;
 
@@ -319,9 +336,14 @@ export function ViewController({
     return (
       <PostSessionView
         personalityKey={activePersonality}
-        personalityName={config?.name || activePersonality}
+        personalityName={
+          platicaId
+            ? platicaData.manifest?.title || 'la plática'
+            : config?.name || activePersonality
+        }
         onContinue={() => setShowPostSession(false)}
         isGuest={isGuest}
+        platicaId={platicaId}
       />
     );
   }

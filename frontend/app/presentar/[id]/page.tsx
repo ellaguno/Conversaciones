@@ -26,6 +26,21 @@ import type {
 
 const TRANSITION_MS = 600;
 
+// ¿Hay sesión iniciada? El middleware no responde 401 a las rutas protegidas:
+// REDIRIGE al login, y fetch sigue el redirect, así que un `res.ok` a secas
+// daría "autenticado" con el HTML del login. Solo cuenta como sesión una
+// respuesta directa y parseable como JSON.
+async function fetchProfile(): Promise<{ email: string } | null> {
+  try {
+    const r = await fetch('/api/auth/profile', { credentials: 'include' });
+    if (!r.ok || r.redirected) return null;
+    const d = await r.json();
+    return typeof d?.email === 'string' ? { email: d.email } : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PresentarPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
@@ -95,6 +110,17 @@ function LiveMode({
   // rooms aislados). El roomName del usuario vive en localStorage, escrito
   // por el token-fetch de app.tsx o de este mismo componente.
   const [warningState, setWarningState] = useState<'checking' | 'active' | 'ready'>('checking');
+  // Visitante externo (liga pública, sin cuenta): no auto-conectamos. Dos
+  // razones — cada carga de la página despacharía un agente y consumiría
+  // minutos aunque nadie esté viendo, y los navegadores bloquean el audio
+  // que arranca sin un gesto del usuario, así que sin este clic el orador
+  // se oiría mudo. Con sesión iniciada mantenemos el arranque automático:
+  // es el flujo del presentador desde su lista.
+  const [authState, setAuthState] = useState<'checking' | 'authed' | 'anon'>('checking');
+  const [guestStarted, setGuestStarted] = useState(false);
+  useEffect(() => {
+    fetchProfile().then((p) => setAuthState(p ? 'authed' : 'anon'));
+  }, []);
   useEffect(() => {
     const ownRoom =
       typeof window !== 'undefined' ? window.localStorage.getItem(`platica_session_${id}`) : null;
@@ -113,7 +139,7 @@ function LiveMode({
       .catch(() => setWarningState('ready'));
   }, [id]);
 
-  if (warningState === 'checking') {
+  if (warningState === 'checking' || authState === 'checking') {
     return <FullScreenMessage>Verificando sesiones activas…</FullScreenMessage>;
   }
   if (warningState === 'active') {
@@ -139,6 +165,31 @@ function LiveMode({
               className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90"
             >
               Continuar de todos modos
+            </button>
+          </div>
+        </div>
+      </FullScreenMessage>
+    );
+  }
+  if (authState === 'anon' && !guestStarted) {
+    return (
+      <FullScreenMessage>
+        <div className="max-w-md space-y-4 text-center">
+          <div className="text-2xl font-semibold">{manifest.title}</div>
+          <div className="text-sm text-white/70">
+            {manifest.presenter_name
+              ? `${manifest.presenter_name} te va a presentar esta plática en voz alta. `
+              : 'Un orador te va a presentar esta plática en voz alta. '}
+            Sube el volumen y, si quieres preguntar algo, permite el micrófono cuando el navegador
+            te lo pida.
+          </div>
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => setGuestStarted(true)}
+              className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-black hover:bg-white/90"
+            >
+              Comenzar plática
             </button>
           </div>
         </div>
@@ -259,20 +310,28 @@ function LiveProjection({
   const sessionCtx = useSessionContext();
 
   // Flujo de salida: en vez de navegar de vuelta directo, ofrecemos enviar
-  // la transcripción al correo del usuario. El agente la deja escrita en
-  // disco al desconectar; el endpoint /api/conversations/email recoge el
-  // archivo más reciente del usuario para esa personalidad.
+  // la transcripción por correo. El agente la deja escrita en disco al
+  // desconectar; /api/platicas/[id]/transcript la recoge de la carpeta
+  // `platica_<id>` del usuario (o del invitado, si entró por liga externa).
   const [leaveStage, setLeaveStage] = useState<'live' | 'asking' | 'sending' | 'sent' | 'failed'>(
     'live'
   );
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Marca de arranque de la sesión: el endpoint la usa para no mandar la
+  // transcripción de una corrida anterior cuando ésta no dejó nada escrito.
+  const startedAtRef = useRef<number>(Date.now());
 
+  // Prellena con el correo del perfil. 401 (visitante por liga externa) deja
+  // el campo vacío para que escriba el suyo.
   useEffect(() => {
-    fetch('/api/auth/profile', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((d) => setUserEmail(typeof d?.email === 'string' ? d.email : null))
-      .catch(() => setUserEmail(null));
+    fetchProfile().then((p) => {
+      if (!p) return;
+      setIsAuthed(true);
+      if (p.email) setEmailInput(p.email);
+    });
   }, []);
 
   const handleLeave = () => {
@@ -285,22 +344,22 @@ function LiveProjection({
   };
 
   const handleSend = async () => {
+    const email = emailInput.trim();
+    if (!email.includes('@')) return;
     setLeaveStage('sending');
     setSendError(null);
     try {
-      const res = await fetch('/api/conversations/email', {
+      const res = await fetch(`/api/platicas/${id}/transcript`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personality: manifest.personality_key || 'custom',
-          personalityName: manifest.title,
-        }),
+        body: JSON.stringify({ email, notBefore: startedAtRef.current }),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `HTTP ${res.status}`);
       }
+      setSentTo(body?.sentTo || email);
       setLeaveStage('sent');
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Error al enviar');
@@ -308,7 +367,12 @@ function LiveProjection({
     }
   };
 
-  const handleClose = () => router.push('/platicas');
+  // El visitante externo no tiene acceso a /platicas (lo mandaría al login);
+  // para él "cerrar" es volver a la portada de la propia plática.
+  const handleClose = () => {
+    if (isAuthed) router.push('/platicas');
+    else window.location.href = `/presentar/${id}`;
+  };
 
   return (
     <>
@@ -329,7 +393,9 @@ function LiveProjection({
       {leaveStage !== 'live' && (
         <LeaveTranscriptDialog
           stage={leaveStage}
-          email={userEmail}
+          email={emailInput}
+          onEmailChange={setEmailInput}
+          sentTo={sentTo}
           errorMsg={sendError}
           onSend={handleSend}
           onSkip={handleClose}
@@ -344,6 +410,8 @@ function LiveProjection({
 function LeaveTranscriptDialog({
   stage,
   email,
+  onEmailChange,
+  sentTo,
   errorMsg,
   onSend,
   onSkip,
@@ -351,24 +419,39 @@ function LeaveTranscriptDialog({
   onRetry,
 }: {
   stage: 'asking' | 'sending' | 'sent' | 'failed';
-  email: string | null;
+  email: string;
+  onEmailChange: (v: string) => void;
+  sentTo: string | null;
   errorMsg: string | null;
   onSend: () => void;
   onSkip: () => void;
   onClose: () => void;
   onRetry: () => void;
 }) {
+  const emailOk = email.trim().includes('@');
   return (
     <FullScreenMessage>
-      <div className="max-w-md space-y-4 text-center">
+      <div className="w-full max-w-md space-y-4 text-center">
         <div className="text-xl font-semibold">Plática terminada</div>
         {stage === 'asking' && (
           <>
-            <div className="text-sm text-white/70">
-              ¿Quieres recibir la transcripción por correo
-              {email ? ` a ${email}` : ''}?
-            </div>
-            <div className="flex justify-center gap-3 pt-2">
+            <div className="text-sm text-white/70">¿A qué correo te mandamos la transcripción?</div>
+            {/* Un solo campo para todos los casos: viene prellenado con el
+              correo del perfil si hay sesión, y vacío para quien entró por
+              liga externa. Editable siempre — el presentador a veces quiere
+              mandársela a otra dirección. */}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => onEmailChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && emailOk) onSend();
+              }}
+              placeholder="tu@correo.com"
+              autoFocus
+              className="w-full rounded-full border border-white/30 bg-white/10 px-4 py-2 text-center text-sm text-white placeholder:text-white/40 focus:border-white/60 focus:outline-none"
+            />
+            <div className="flex justify-center gap-3 pt-1">
               <button
                 type="button"
                 onClick={onSkip}
@@ -379,9 +462,8 @@ function LeaveTranscriptDialog({
               <button
                 type="button"
                 onClick={onSend}
-                disabled={!email}
+                disabled={!emailOk}
                 className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black hover:bg-white/90 disabled:opacity-50"
-                title={email ? '' : 'No hay correo configurado en tu perfil'}
               >
                 Enviar
               </button>
@@ -394,7 +476,7 @@ function LeaveTranscriptDialog({
         {stage === 'sent' && (
           <>
             <div className="text-sm text-white/70">
-              Transcripción enviada{email ? ` a ${email}` : ''}.
+              Transcripción enviada{sentTo ? ` a ${sentTo}` : ''}.
             </div>
             <div className="flex justify-center pt-2">
               <button

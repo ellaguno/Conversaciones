@@ -10,8 +10,8 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { auth } from '@/lib/auth';
-import { getPlaticaDir, readManifest } from '@/lib/platicas-storage';
+import { authorizePlaticaRead } from '@/lib/platica-access';
+import { getPlaticaDir } from '@/lib/platicas-storage';
 import { rateLimit } from '@/lib/rate-limit';
 
 interface PlaticaLiveState {
@@ -75,18 +75,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!rateLimit(`platicas-state:${ip}`, 600, 60_000)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
   }
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  }
   const { id } = await params;
-  const manifest = readManifest(id);
-  if (!manifest) {
-    return NextResponse.json({ error: 'Plática no encontrada' }, { status: 404 });
-  }
-  // Lectura permitida al owner o a cualquiera si la plática está compartida.
-  if (manifest.owner_user_id !== session.user.id && !manifest.shared) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+  // Lectura: owner, cualquier autenticado si shared, cualquiera si public_link.
+  const access = await authorizePlaticaRead(id);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const sessionParam = (new URL(req.url).searchParams.get('session') ?? '').replace(

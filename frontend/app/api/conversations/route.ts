@@ -52,6 +52,10 @@ export async function GET(req: Request) {
         return NextResponse.json({ recent: [] });
       }
       const dirs = readdirSync(conversationsBase).filter((d) => {
+        // `platica_<id>` no es una personalidad: son las transcripciones de
+        // pláticas. Mostrarlas en "Recientes" pintaría el id crudo y al
+        // picarlas intentaría iniciar una personalidad inexistente.
+        if (d.startsWith('platica_')) return false;
         try {
           return statSync(join(conversationsBase, d)).isDirectory();
         } catch {

@@ -415,8 +415,21 @@ async def entrypoint(ctx: JobContext):
             f"{len(tools)} herramientas registradas"
         )
 
-    # Conversation log for all personalities (user-scoped)
-    conv_log = ConversationLog(personality_key, personality["name"], user_id=user_id)
+    # Conversation log for all personalities (user-scoped).
+    #
+    # Las pláticas se guardan en su PROPIA carpeta `platica_<id>` en vez de la
+    # de la personalidad. Motivo: /api/token no acepta 'custom' como
+    # personalidad (no está en VALID_PERSONALITIES) y la degrada a 'normal', así
+    # que el transcript acababa en conversations/normal/ mientras la pantalla
+    # final lo buscaba en conversations/custom/ → "No hay conversaciones". Con
+    # la carpeta por plática, el nombre no depende de la personalidad negociada
+    # y además no se mezclan transcripciones de pláticas distintas.
+    if platica is not None:
+        log_key = f"platica_{platica.manifest.id}"
+        log_name = platica.manifest.presenter_name or platica.manifest.title
+        conv_log = ConversationLog(log_key, log_name, user_id=user_id)
+    else:
+        conv_log = ConversationLog(personality_key, personality["name"], user_id=user_id)
 
     # Use custom voice/temperature/model if provided, otherwise use personality defaults.
     # Plática voice_id and model, when set on the manifest, take precedence over
