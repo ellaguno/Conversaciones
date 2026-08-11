@@ -153,13 +153,22 @@ export default function PlaticasListPage() {
             {items.map((p) => {
               const isOwner = !!currentUserId && p.owner_user_id === currentUserId;
               return (
+                // Las pláticas propias apilan título y controles en renglones
+                // aparte: con compartir/editar/borrar en la misma línea no
+                // quedaba ancho ni para la mitad del nombre. Las compartidas
+                // por otros solo traen dos botones, así que a partir de sm
+                // caben al lado del título.
                 <li
                   key={p.id}
-                  className="border-border bg-card flex items-center justify-between rounded-lg border p-3"
+                  className={`border-border bg-card rounded-lg border p-3 ${
+                    isOwner ? '' : 'sm:flex sm:items-center sm:justify-between sm:gap-3'
+                  }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className="truncate text-sm font-semibold">{p.title}</div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {/* Sin truncate: el nombre completo importa más que la
+                        altura de la fila. */}
+                      <div className="text-sm font-semibold break-words">{p.title}</div>
                       {!isOwner && (
                         <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-emerald-700 uppercase dark:text-emerald-300">
                           Compartida
@@ -182,7 +191,11 @@ export default function PlaticasListPage() {
                       {new Date(p.created_at).toLocaleDateString('es-MX')}
                     </div>
                   </div>
-                  <div className="ml-3 flex shrink-0 items-center gap-2">
+                  <div
+                    className={`mt-2.5 flex flex-wrap items-center gap-2 ${
+                      isOwner ? '' : 'sm:mt-0 sm:shrink-0'
+                    }`}
+                  >
                     {/* Pareja "Proyección + Iniciar": la proyección puede abrirse
                       sola desde otro device, pero al picar Iniciar también se
                       abre automáticamente en un tab nuevo — por eso van juntas
@@ -213,7 +226,9 @@ export default function PlaticasListPage() {
                       Todo en uno
                     </Link>
                     {isOwner && (
-                      <>
+                      // ml-auto empuja los controles de dueño a la derecha
+                      // cuando caben en el mismo renglón; si no, bajan juntos.
+                      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                         <label
                           className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs select-none"
                           title="Compartir INTERNO: todos los usuarios autenticados de la plataforma podrán ver, iniciar y proyectar esta plática (no editarla)"
@@ -263,7 +278,7 @@ export default function PlaticasListPage() {
                         >
                           {busyId === p.id ? '…' : '🗑'}
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </li>
